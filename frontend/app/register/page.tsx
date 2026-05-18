@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/toast';
 const schema = z.object({
   name: z.string().min(2, 'Enter your full name'),
   email: z.string().email('Enter a valid email'),
+  phoneNumber: z.string().regex(/^\+?[0-9]{10,15}$/, 'Enter a valid phone number'),
   password: z.string().min(8, 'Password must contain at least 8 characters'),
   universityId: z.string().min(8, 'Use your university ID'),
   idCardImage: z.any().refine((files) => files?.length === 1, 'University ID image is required'),
@@ -33,6 +34,7 @@ export default function RegisterPage() {
     const formData = new FormData();
     formData.append('name', values.name);
     formData.append('email', values.email);
+    formData.append('phoneNumber', values.phoneNumber);
     formData.append('password', values.password);
     formData.append('universityId', values.universityId);
     formData.append('idCardImage', values.idCardImage[0]);
@@ -66,6 +68,11 @@ export default function RegisterPage() {
             <FormLabel htmlFor="email">University email</FormLabel>
             <Input id="email" type="email" placeholder="student@university.edu" {...register('email')} />
             {errors.email && <FormMessage>{errors.email.message}</FormMessage>}
+          </FormField>
+          <FormField>
+            <FormLabel htmlFor="phoneNumber">Phone number</FormLabel>
+            <Input id="phoneNumber" type="tel" placeholder="+20 123 4567890" {...register('phoneNumber')} />
+            {errors.phoneNumber && <FormMessage>{errors.phoneNumber.message}</FormMessage>}
           </FormField>
           <FormField>
             <FormLabel htmlFor="password">Password</FormLabel>

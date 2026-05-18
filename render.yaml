@@ -12,8 +12,10 @@ services:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 4000
-      - key: MONGO_URI
+        value: 5000
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
         sync: false
       - key: JWT_SECRET
         sync: false
@@ -29,3 +31,22 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: PAYMOB_API_KEY
+        sync: false
+      - key: FAWRY_MERCHANT_CODE
+        sync: false
+      - key: FAWRY_SECURITY_KEY
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "https://uniride.vercel.app,https://yourdomain.com"
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "900000"
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: "100"
+

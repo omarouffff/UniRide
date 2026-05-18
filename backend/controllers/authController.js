@@ -15,9 +15,14 @@ function setAuthCookie(res, token) {
 }
 
 const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, password, universityId } = req.body;
-  if (!name || !email || !password || !universityId) {
+  const { name, email, phoneNumber, password, universityId } = req.body;
+  if (!name || !email || !phoneNumber || !password || !universityId) {
     return res.status(400).json({ message: 'All fields are required' });
+  }
+
+  const phoneRegex = /^\+?[0-9]{10,15}$/;
+  if (!phoneRegex.test(phoneNumber)) {
+    return res.status(400).json({ message: 'Invalid phone number format' });
   }
 
   const idCardFile = req.files?.idCardImage?.[0] || req.files?.universityIdImage?.[0];
@@ -43,6 +48,7 @@ const registerUser = asyncHandler(async (req, res) => {
   const user = await User.create({
     name,
     email,
+    phoneNumber,
     passwordHash: password,
     universityId,
     idCardImage: idCardUpload.secure_url,
