@@ -25,12 +25,6 @@ const userSchema = new mongoose.Schema(
         return this.role === 'student';
       },
     },
-    paymentProofImage: {
-      type: String,
-      required() {
-        return this.role === 'student';
-      },
-    },
     universityIdImage: { type: String },
     universityIdStatus: {
       type: String,
@@ -75,7 +69,6 @@ userSchema.methods.toSafeObject = function () {
     status: this.status,
     universityId: this.universityId,
     idCardImage: this.idCardImage,
-    paymentProofImage: this.paymentProofImage,
     universityIdImage: this.universityIdImage || this.idCardImage,
     universityIdStatus: this.status,
     reviewedAt: this.reviewedAt,

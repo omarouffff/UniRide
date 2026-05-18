@@ -17,8 +17,8 @@ interface AdminUser {
   email: string;
   role: 'student' | 'admin' | 'driver';
   status: 'pending' | 'approved' | 'rejected';
+  universityId?: string;
   idCardImage?: string;
-  paymentProofImage?: string;
 }
 
 interface Analytics {
@@ -57,7 +57,8 @@ export default function AdminPage() {
   }), [users]);
 
   async function updateUser(id: string, status: 'approved' | 'rejected') {
-    const response = await api.patch(`/admin/users/${id}`, { status });
+    const endpoint = status === 'approved' ? `/admin/users/${id}/approve` : `/admin/users/${id}/reject`;
+    const response = await api.patch(endpoint);
     setUsers((current) => current.map((item) => (item.id === id ? response.data.user : item)));
     toast({ variant: 'success', title: `User ${status}`, description: 'The account lifecycle was updated.' });
   }
@@ -118,6 +119,7 @@ export default function AdminPage() {
                     <div>
                       <h3 className="font-semibold text-white">{adminUser.name}</h3>
                       <p className="text-sm text-slate-400">{adminUser.email}</p>
+                      <p className="text-sm text-slate-400">University ID: {adminUser.universityId || 'N/A'}</p>
                       <p className="mt-1 text-sm capitalize text-cyan-100">{adminUser.status}</p>
                     </div>
                     <div className="flex gap-2">
@@ -127,7 +129,6 @@ export default function AdminPage() {
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     {adminUser.idCardImage && <a href={adminUser.idCardImage} target="_blank" className="text-sm text-cyan-200 hover:text-cyan-100">University ID image</a>}
-                    {adminUser.paymentProofImage && <a href={adminUser.paymentProofImage} target="_blank" className="text-sm text-cyan-200 hover:text-cyan-100">Payment proof image</a>}
                   </div>
                 </div>
               ))}

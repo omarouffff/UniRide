@@ -9,7 +9,6 @@ export interface UserProfile {
   universityId: string;
   universityIdStatus: 'pending' | 'approved' | 'verified' | 'rejected';
   idCardImage?: string;
-  paymentProofImage?: string;
   universityIdImage?: string;
   noShowCount?: number;
   waitingListPosition?: number | null;

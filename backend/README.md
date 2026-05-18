@@ -23,7 +23,7 @@ Production-oriented Express, MongoDB, Cloudinary, JWT, and role-based API for th
 
 ## APIs
 
-- `POST /api/auth/register` - multipart registration with `idCardImage` and `paymentProofImage`.
+- `POST /api/auth/register` - multipart registration with `idCardImage`.
 - `POST /api/auth/login`
 - `GET /api/auth/me`
 - `POST /api/auth/verify-university-id`
@@ -53,6 +53,6 @@ Production-oriented Express, MongoDB, Cloudinary, JWT, and role-based API for th
 ## Notes
 
 - Student lifecycle is `pending -> approved -> rejected`.
-- University ID and payment proof uploads use Cloudinary; MongoDB stores secure URLs only.
+- University ID card uploads use Cloudinary; MongoDB stores secure URLs only.
 - Approved students can book trips. Pending or rejected students can log in but cannot book.
 - QR payloads are encrypted with `QR_ENCRYPTION_SECRET` and rendered as QR images.

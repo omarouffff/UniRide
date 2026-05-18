@@ -1,11 +1,14 @@
 const express = require('express');
-const { getUsers, updateUserStatus, createTrip, getTrips, getAnalytics } = require('../controllers/adminController');
+const { getUsers, getPendingUsers, updateUserStatus, approveUser, rejectUser, createTrip, getTrips, getAnalytics } = require('../controllers/adminController');
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
 router.use(protect, authorizeRoles('admin'));
 router.get('/users', getUsers);
+router.get('/users/pending', getPendingUsers);
+router.patch('/users/:id/approve', approveUser);
+router.patch('/users/:id/reject', rejectUser);
 router.patch('/users/:userId', updateUserStatus);
 router.get('/trips', getTrips);
 router.post('/trips', createTrip);

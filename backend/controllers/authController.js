@@ -21,9 +21,8 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   const idCardFile = req.files?.idCardImage?.[0] || req.files?.universityIdImage?.[0];
-  const paymentProofFile = req.files?.paymentProofImage?.[0];
-  if (!idCardFile || !paymentProofFile) {
-    return res.status(400).json({ message: 'University ID image and payment proof image are required' });
+  if (!idCardFile) {
+    return res.status(400).json({ message: 'University ID image is required' });
   }
 
   if (!validateEmail(email)) {
@@ -39,10 +38,7 @@ const registerUser = asyncHandler(async (req, res) => {
     return res.status(409).json({ message: 'Email already registered' });
   }
 
-  const [idCardUpload, paymentProofUpload] = await Promise.all([
-    uploadToCloudinary(idCardFile, 'uniride/id-cards'),
-    uploadToCloudinary(paymentProofFile, 'uniride/payment-proofs'),
-  ]);
+  const idCardUpload = await uploadToCloudinary(idCardFile, 'uniride/id-cards');
 
   const user = await User.create({
     name,
@@ -50,16 +46,13 @@ const registerUser = asyncHandler(async (req, res) => {
     passwordHash: password,
     universityId,
     idCardImage: idCardUpload.secure_url,
-    paymentProofImage: paymentProofUpload.secure_url,
     universityIdImage: idCardUpload.secure_url,
     universityIdStatus: 'pending',
     status: 'pending',
   });
 
-  const token = generateToken(user._id);
-  setAuthCookie(res, token);
-
   res.status(201).json({
+    message: 'Registration submitted. Account waiting for admin approval.',
     user: user.toSafeObject(),
   });
 });
@@ -73,6 +66,14 @@ const loginUser = asyncHandler(async (req, res) => {
   const user = await User.findOne({ email });
   if (!user || !(await user.comparePassword(password))) {
     return res.status(401).json({ message: 'Invalid credentials' });
+  }
+
+  if (user.status === 'pending') {
+    return res.status(403).json({ message: 'Account waiting for admin approval', status: 'pending' });
+  }
+
+  if (user.status === 'rejected') {
+    return res.status(403).json({ message: 'Account rejected by administration', status: 'rejected' });
   }
 
   const token = generateToken(user._id);

@@ -28,6 +28,7 @@ export default function DashboardPage() {
     if (!user) router.replace('/login');
     else if (user.role === 'admin') router.replace('/admin');
     else if (user.role === 'driver') router.replace('/driver/dashboard');
+    else if (user.status !== 'approved') router.replace(user.status === 'pending' ? '/pending-approval' : '/login');
   }, [router, user]);
 
   useEffect(() => {

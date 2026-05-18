@@ -36,7 +36,11 @@ export default function LoginPage() {
       toast({ variant: 'success', title: 'Login successful', description: 'Welcome back to UniRide.' });
       router.push('/dashboard');
     } catch (error: any) {
-      toast({ variant: 'error', title: 'Login failed', description: error?.response?.data?.message || 'Check your credentials.' });
+      const message = error?.response?.data?.message || 'Check your credentials.';
+      toast({ variant: 'error', title: 'Login blocked', description: message });
+      if (error?.response?.data?.status === 'pending') {
+        router.push('/pending-approval');
+      }
     } finally {
       setLoading(false);
     }

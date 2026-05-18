@@ -10,7 +10,6 @@ router.post(
   upload.fields([
     { name: 'idCardImage', maxCount: 1 },
     { name: 'universityIdImage', maxCount: 1 },
-    { name: 'paymentProofImage', maxCount: 1 },
   ]),
   registerUser
 );

@@ -22,6 +22,14 @@ const getUsers = asyncHandler(async (req, res) => {
   res.json({ users: users.map((user) => user.toSafeObject()) });
 });
 
+const getPendingUsers = asyncHandler(async (req, res) => {
+  const users = await User.find({ role: 'student', status: 'pending' })
+    .select('-passwordHash')
+    .sort({ createdAt: -1 });
+
+  res.json({ users: users.map((user) => user.toSafeObject()) });
+});
+
 const updateUserStatus = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { status, reviewNotes, role } = req.body;
@@ -52,6 +60,36 @@ const updateUserStatus = asyncHandler(async (req, res) => {
   await user.save();
 
   res.json({ user: user.toSafeObject() });
+});
+
+const approveUser = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  user.status = 'approved';
+  user.universityIdStatus = 'approved';
+  user.reviewedAt = new Date();
+  user.reviewNotes = undefined;
+  await user.save();
+
+  res.json({ message: 'User approved successfully', user: user.toSafeObject() });
+});
+
+const rejectUser = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  user.status = 'rejected';
+  user.universityIdStatus = 'rejected';
+  user.reviewedAt = new Date();
+  user.reviewNotes = req.body?.reviewNotes || 'Rejected by administration';
+  await user.save();
+
+  res.json({ message: 'User rejected successfully', user: user.toSafeObject() });
 });
 
 const createTrip = asyncHandler(async (req, res) => {
@@ -98,4 +136,4 @@ const getAnalytics = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getUsers, updateUserStatus, createTrip, getTrips, getAnalytics };
+module.exports = { getUsers, getPendingUsers, updateUserStatus, approveUser, rejectUser, createTrip, getTrips, getAnalytics };

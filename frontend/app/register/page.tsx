@@ -11,7 +11,6 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormField, FormLabel, FormMessage } from '@/components/ui/form';
-import { useAuthStore } from '@/store/useAuthStore';
 import { useToast } from '@/components/ui/toast';
 
 const schema = z.object({
@@ -20,14 +19,12 @@ const schema = z.object({
   password: z.string().min(8, 'Password must contain at least 8 characters'),
   universityId: z.string().min(8, 'Use your university ID'),
   idCardImage: z.any().refine((files) => files?.length === 1, 'University ID image is required'),
-  paymentProofImage: z.any().refine((files) => files?.length === 1, 'Payment proof image is required'),
 });
 
 type Values = z.infer<typeof schema>;
 
 export default function RegisterPage() {
   const router = useRouter();
-  const setUser = useAuthStore((state) => state.setUser);
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm<Values>({ resolver: zodResolver(schema) });
@@ -39,14 +36,12 @@ export default function RegisterPage() {
     formData.append('password', values.password);
     formData.append('universityId', values.universityId);
     formData.append('idCardImage', values.idCardImage[0]);
-    formData.append('paymentProofImage', values.paymentProofImage[0]);
 
     setLoading(true);
     try {
-      const response = await api.post('/auth/register', formData);
-      setUser(response.data.user);
+      await api.post('/auth/register', formData);
       toast({ variant: 'success', title: 'Registration submitted', description: 'Your account is pending admin approval.' });
-      router.push('/dashboard');
+      router.push('/pending-approval');
     } catch (error: any) {
       toast({ variant: 'error', title: 'Registration failed', description: error?.response?.data?.message || 'Please review your data.' });
     } finally {
@@ -82,15 +77,10 @@ export default function RegisterPage() {
             <Input id="universityId" placeholder="2026001234" {...register('universityId')} />
             {errors.universityId && <FormMessage>{errors.universityId.message}</FormMessage>}
           </FormField>
-          <FormField>
+          <FormField className="sm:col-span-2">
             <FormLabel htmlFor="idCardImage" className="flex items-center gap-2"><Upload className="h-4 w-4" /> University ID image</FormLabel>
             <Input id="idCardImage" type="file" accept="image/png,image/jpeg" {...register('idCardImage')} />
             {errors.idCardImage && <FormMessage>{String(errors.idCardImage.message)}</FormMessage>}
-          </FormField>
-          <FormField>
-            <FormLabel htmlFor="paymentProofImage" className="flex items-center gap-2"><Upload className="h-4 w-4" /> Payment proof</FormLabel>
-            <Input id="paymentProofImage" type="file" accept="image/png,image/jpeg" {...register('paymentProofImage')} />
-            {errors.paymentProofImage && <FormMessage>{String(errors.paymentProofImage.message)}</FormMessage>}
           </FormField>
           <Button type="submit" className="gap-2 sm:col-span-2" disabled={loading}>
             <UserPlus className="h-4 w-4" />
