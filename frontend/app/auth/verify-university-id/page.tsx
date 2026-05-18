@@ -19,7 +19,6 @@ export default function VerifyUniversityIdPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
   const { toast } = useToast();
   const { register, handleSubmit, formState: { errors } } = useForm<VerifyFormValues>();
@@ -43,7 +42,6 @@ export default function VerifyUniversityIdPage() {
     try {
       await api.post('/auth/verify-university-id', formData, {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',
         },
       });

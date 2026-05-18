@@ -23,7 +23,6 @@ type BookingFormValues = z.infer<typeof bookingSchema>;
 export default function NewBookingPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const token = useAuthStore((state) => state.token);
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const {
@@ -41,9 +40,7 @@ export default function NewBookingPage() {
   async function onSubmit(values: BookingFormValues) {
     setLoading(true);
     try {
-      await api.post('/bookings', values, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.post('/bookings', values);
       toast({ variant: 'success', title: 'Booking created', description: 'Your ride has been added to the system.' });
       router.push('/bookings');
     } catch (error) {

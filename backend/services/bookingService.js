@@ -1,31 +1,38 @@
 const Booking = require('../models/Booking');
+const Trip = require('../models/Trip');
 
 const DEFAULT_SEAT_CAPACITY = 40;
 
 async function allocateBooking(details) {
-  const { user, pickupPoint, destination, travelDate } = details;
+  const { user, pickupPoint, destination, travelDate, tripId } = details;
+  const trip = tripId ? await Trip.findById(tripId) : null;
 
-  const targetDate = new Date(travelDate);
-  targetDate.setHours(0, 0, 0, 0);
+  const targetDate = trip ? new Date(trip.departureTime) : new Date(travelDate);
+  if (!trip) {
+    targetDate.setHours(0, 0, 0, 0);
+  }
 
-  const existingConfirmed = await Booking.countDocuments({ travelDate: targetDate, status: 'confirmed' });
-  const bookingsOnDate = await Booking.find({ travelDate: targetDate }).sort('createdAt');
+  const bookingFilter = trip ? { trip: trip._id } : { travelDate: targetDate };
+  const existingConfirmed = await Booking.countDocuments({ ...bookingFilter, status: 'confirmed' });
+  const bookingsOnTrip = await Booking.find(bookingFilter).sort('createdAt');
+  const capacity = trip?.capacity || DEFAULT_SEAT_CAPACITY;
 
   const booking = new Booking({
     user,
-    pickupPoint,
-    destination,
+    trip: trip?._id,
+    pickupPoint: trip?.pickupPoint || pickupPoint,
+    destination: trip?.destination || destination,
     travelDate: targetDate,
-    route: `${pickupPoint} → ${destination}`,
+    route: trip ? `${trip.pickupPoint} -> ${trip.destination}` : `${pickupPoint} -> ${destination}`,
   });
 
-  if (existingConfirmed < DEFAULT_SEAT_CAPACITY) {
+  if (existingConfirmed < capacity) {
     booking.status = 'confirmed';
     booking.seat = `S-${existingConfirmed + 1}`;
     booking.waitingPosition = null;
   } else {
     booking.status = 'waiting';
-    const waitingCount = bookingsOnDate.filter((item) => item.status === 'waiting').length;
+    const waitingCount = bookingsOnTrip.filter((item) => item.status === 'waiting').length;
     booking.waitingPosition = waitingCount + 1;
   }
 
@@ -33,4 +40,4 @@ async function allocateBooking(details) {
   return booking;
 }
 
-module.exports = { allocateBooking };
+module.exports = { allocateBooking, DEFAULT_SEAT_CAPACITY };

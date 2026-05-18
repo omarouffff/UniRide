@@ -20,7 +20,7 @@ const protect = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-password');
+    req.user = await User.findById(decoded.id).select('-passwordHash');
     if (!req.user) {
       return res.status(401).json({ message: 'User not found' });
     }
@@ -39,4 +39,17 @@ const authorizeRoles = (...roles) => {
   };
 };
 
-module.exports = { protect, authorizeRoles };
+const requireApproved = (req, res, next) => {
+  if (req.user?.role === 'student' && req.user.status !== 'approved') {
+    return res.status(403).json({
+      message:
+        req.user.status === 'rejected'
+          ? 'Your account was rejected by administration'
+          : 'Your account is still pending admin approval',
+      status: req.user.status,
+    });
+  }
+  next();
+};
+
+module.exports = { protect, authorizeRoles, requireApproved };

@@ -1,12 +1,15 @@
 const express = require('express');
 const http = require('http');
-const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const dotenv = require('dotenv');
+dotenv.config();
+
 const { Server } = require('socket.io');
+const mongoose = require('mongoose');
 const { connectDatabase } = require('./config/db');
+const cloudinary = require('./config/cloudinary');
 const { initRedis } = require('./config/redisClient');
 const authRoutes = require('./routes/authRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
@@ -15,13 +18,27 @@ const driverRoutes = require('./routes/driverRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { getRouteRoomName } = require('./utils/socketRooms');
 
-dotenv.config();
-
 const app = express();
 const server = http.createServer(app);
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error(`CORS blocked origin: ${origin}`));
+  },
+  credentials: true,
+};
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL,
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST'],
   },
@@ -50,14 +67,29 @@ io.on('connection', (socket) => {
 
 // API middleware
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'UNI Transportation backend running' });
+  const cloudinaryConfig = cloudinary.config();
+  const cloudinaryValues = [cloudinaryConfig.cloud_name, cloudinaryConfig.api_key, cloudinaryConfig.api_secret];
+  const hasCloudinaryPlaceholder = cloudinaryValues.some((value) => typeof value === 'string' && value.startsWith('your-'));
+  res.status(200).json({
+    status: 'ok',
+    message: 'UniRide backend running',
+    database: {
+      state: mongoose.connection.readyState,
+      name: mongoose.connection.name,
+      host: mongoose.connection.host,
+    },
+    cloudinary: {
+      configured: Boolean(cloudinaryConfig.cloud_name && cloudinaryConfig.api_key && cloudinaryConfig.api_secret && !hasCloudinaryPlaceholder),
+      cloudName: cloudinaryConfig.cloud_name || null,
+    },
+  });
 });
 
 // Routes

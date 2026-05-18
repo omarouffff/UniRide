@@ -1,38 +1,58 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowRight, Bus, LogIn, UserPlus } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export default function HomePage() {
+  const router = useRouter();
+  const user = useAuthStore((state) => state.user);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      router.replace(user ? '/dashboard' : '/login');
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [router, user]);
+
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 p-6 md:p-12">
-      <section className="mx-auto max-w-6xl rounded-3xl border border-slate-700 bg-slate-900/80 p-10 shadow-2xl shadow-slate-950/30 backdrop-blur-md">
-        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
-          <div>
-            <span className="inline-flex rounded-full bg-indigo-500/20 px-4 py-1 text-sm font-semibold text-indigo-200">
-              Production-ready university transit platform
-            </span>
-            <h1 className="mt-6 text-5xl font-semibold tracking-tight text-white sm:text-6xl">
-              Manage student rides, approvals, and waiting lists in real time.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg text-slate-300">
-              Secure login, smart booking, campus QR boarding, and a responsive admin dashboard powered by Next.js, Tailwind, Socket.io, and MongoDB.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/auth/login" className={buttonVariants({ size: 'lg' })}>
-                Login
-              </Link>
-              <Link href="/auth/register" className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-                Register
-              </Link>
-            </div>
+    <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-50">
+      <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl flex-col justify-center gap-10 opacity-0 animate-[fadeIn_260ms_ease-out_forwards]">
+        <div className="max-w-3xl">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100">
+            <Bus className="h-4 w-4" />
+            UniRide transport system
           </div>
-          <div className="rounded-3xl bg-slate-800 p-8 ring-1 ring-slate-700/80">
-            <h2 className="text-xl font-semibold text-white">Student experience</h2>
-            <div className="mt-6 space-y-4 text-slate-300">
-              <p>• Upload university ID proof and track verification status.</p>
-              <p>• Book buses, view waiting list position, and receive QR boarding codes.</p>
-              <p>• Real-time updates for live seat availability and notifications.</p>
-            </div>
+          <h1 className="text-4xl font-semibold tracking-normal text-white sm:text-6xl">
+            University rides, approvals, bookings, and boarding in one fast SaaS workspace.
+          </h1>
+          <p className="mt-6 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
+            Students upload documents, admins approve access, drivers scan QR codes, and seats update live.
+          </p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Link href="/login" className={buttonVariants({ size: 'lg' })}>
+              <LogIn className="mr-2 h-4 w-4" />
+              Login
+            </Link>
+            <Link href="/register" className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Register
+            </Link>
           </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {['Pending approval', 'Seat allocation', 'Encrypted QR boarding'].map((item) => (
+            <div key={item} className="rounded-lg border border-white/10 bg-white/[0.04] p-4 transition duration-200 hover:-translate-y-1 hover:border-cyan-300/40">
+              <div className="flex items-center justify-between">
+                <p className="font-medium text-white">{item}</p>
+                <ArrowRight className="h-4 w-4 text-cyan-200" />
+              </div>
+            </div>
+          ))}
         </div>
       </section>
     </main>

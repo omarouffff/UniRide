@@ -19,7 +19,6 @@ interface BookingCard {
 export default function MyBookingsPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const token = useAuthStore((state) => state.token);
   const [bookings, setBookings] = useState<BookingCard[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -31,9 +30,7 @@ export default function MyBookingsPage() {
 
     async function fetchBookings() {
       try {
-        const response = await api.get('/bookings', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await api.get('/bookings');
         setBookings(response.data.bookings || []);
       } catch (error) {
         console.error('Failed to fetch bookings', error);
@@ -43,7 +40,7 @@ export default function MyBookingsPage() {
     }
 
     fetchBookings();
-  }, [router, token, user]);
+  }, [router, user]);
 
   if (!user) return null;
 
@@ -85,7 +82,7 @@ export default function MyBookingsPage() {
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <Link href="/qr-code" className="inline-flex items-center rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-indigo-300 hover:text-indigo-200">
+                  <Link href="/qr" className="inline-flex items-center rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-indigo-300 hover:text-indigo-200">
                     View boarding QR
                   </Link>
                   <Link href="/profile" className="inline-flex items-center rounded-2xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400">

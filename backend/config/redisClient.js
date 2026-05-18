@@ -9,10 +9,28 @@ async function initRedis() {
     return;
   }
 
-  redisClient = createClient({ url });
+  redisClient = createClient({
+    url,
+    socket: {
+      reconnectStrategy: (retries) => {
+        if (retries >= 5) {
+          return new Error('Redis reconnect limit reached');
+        }
+        return 1000;
+      },
+    },
+  });
+
   redisClient.on('error', (err) => console.error('Redis Client Error', err));
-  await redisClient.connect();
-  console.log('✅ Redis connected');
+  redisClient.on('connect', () => console.log('ℹ️ Redis client connected'));
+
+  try {
+    await redisClient.connect();
+    console.log('✅ Redis connected');
+  } catch (error) {
+    console.warn('⚠️ Redis connection failed. Starting backend without Redis.');
+    redisClient = null;
+  }
 }
 
 function getRedisClient() {

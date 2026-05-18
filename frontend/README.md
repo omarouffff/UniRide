@@ -1,43 +1,46 @@
-# UNI Transportation Frontend
+# UniRide Frontend
 
-This frontend is built with Next.js 14 App Router, Tailwind CSS, TypeScript, React Hook Form, Zod, and Zustand.
+Next.js 14 App Router frontend for UniRide, built with TypeScript, Tailwind CSS, shadcn-style primitives, React Hook Form, Zod, Axios, and Zustand.
 
 ## Folder structure
 
-- `app/` - Next.js pages and route layout.
-- `components/` - Reusable UI and layout components.
-- `lib/` - API client and utility helpers.
-- `store/` - Zustand authentication store.
+- `app/` - route pages and root layout.
+- `app/login` - login.
+- `app/register` - student registration with document uploads.
+- `app/dashboard` - student status and upcoming trip dashboard.
+- `app/booking` - available trip booking flow.
+- `app/my-bookings` - booking history and cancellation.
+- `app/qr` - encrypted QR boarding pass.
+- `app/admin` - admin users, trips, and analytics dashboard.
+- `components/ui` - shared UI primitives.
+- `components/providers` - theme, query, and toast providers.
+- `lib/api.ts` - Axios API client.
+- `store/useAuthStore.ts` - persisted auth store.
 - `types/` - shared TypeScript models.
 
 ## Available pages
 
-- `/` - marketing/home page.
-- `/auth/login` - login page.
-- `/auth/register` - registration page.
-- `/auth/verify-university-id` - upload university ID proof.
-- `/dashboard` - student dashboard.
-- `/bookings` - current bookings list.
-- `/bookings/new` - create a new booking.
-- `/profile` - student profile page.
-- `/qr-code` - boarding QR page.
+- `/`
+- `/login`
+- `/register`
+- `/dashboard`
+- `/booking`
+- `/my-bookings`
+- `/qr`
+- `/admin`
+- `/auth/login` and `/auth/register` compatibility redirects.
 
 ## Run locally
 
 1. Install dependencies:
    ```bash
-   cd frontend
    npm install
    ```
-2. Copy `.env.example` to `.env.local` and configure `NEXT_PUBLIC_API_BASE_URL`.
+2. Configure `.env.local`:
+   ```bash
+   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api
+   ```
 3. Start development server:
    ```bash
    npm run dev
    ```
-
-## Integration notes
-
-- Frontend communicates with backend via Axios using `NEXT_PUBLIC_API_BASE_URL`.
-- Auth state is persisted in localStorage using Zustand.
-- Protected pages redirect to `/auth/login` when the user is not authenticated.
-- Toast notifications are implemented with Radix UI primitives.

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -24,7 +25,6 @@ interface DriverBooking {
 export default function DriverDashboardPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const token = useAuthStore((state) => state.token);
   const clearAuth = useAuthStore((state) => state.clearAuth);
   const [bookings, setBookings] = useState<DriverBooking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,28 +42,13 @@ export default function DriverDashboardPage() {
   }, [router, user]);
 
   useEffect(() => {
-    if (!token) return;
-
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ?? '';
-    const url = `${baseUrl}/api/driver/bookings`;
+    if (!user || user.role !== 'driver') return;
 
     async function loadBookings() {
       try {
         setLoading(true);
-        const response = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          const body = await response.json().catch(() => ({}));
-          throw new Error(body.message || 'Unable to load bookings');
-        }
-
-        const data = await response.json();
-        setBookings(data.bookings || []);
+        const response = await api.get('/driver/bookings');
+        setBookings(response.data.bookings || []);
       } catch (err) {
         console.error(err);
         setError(err instanceof Error ? err.message : 'Could not load driver bookings');
@@ -73,7 +58,7 @@ export default function DriverDashboardPage() {
     }
 
     loadBookings();
-  }, [token]);
+  }, [user]);
 
   if (!user || user.role !== 'driver') {
     return null;

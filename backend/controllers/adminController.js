@@ -1,12 +1,14 @@
 const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
+const Trip = require('../models/Trip');
+const Booking = require('../models/Booking');
 
 const getUsers = asyncHandler(async (req, res) => {
   const { status, role } = req.query;
   const filter = {};
 
   if (status) {
-    filter.universityIdStatus = status;
+    filter.status = status === 'verified' ? 'approved' : status;
   }
 
   if (role) {
@@ -17,7 +19,7 @@ const getUsers = asyncHandler(async (req, res) => {
     .select('-password')
     .sort({ createdAt: -1 });
 
-  res.json({ users });
+  res.json({ users: users.map((user) => user.toSafeObject()) });
 });
 
 const updateUserStatus = asyncHandler(async (req, res) => {
@@ -30,17 +32,17 @@ const updateUserStatus = asyncHandler(async (req, res) => {
   }
 
   if (status) {
-    if (!['pending', 'verified', 'rejected'].includes(status)) {
+    const normalizedStatus = status === 'verified' ? 'approved' : status;
+    if (!['pending', 'approved', 'rejected'].includes(normalizedStatus)) {
       return res.status(400).json({ message: 'Invalid status value' });
     }
-    user.universityIdStatus = status;
-    if (status === 'verified') {
-      user.universityIdVerifiedAt = new Date();
-    }
+    user.status = normalizedStatus;
+    user.universityIdStatus = normalizedStatus;
+    user.reviewedAt = new Date();
   }
 
   if (reviewNotes !== undefined) {
-    user.universityIdReviewNotes = reviewNotes;
+    user.reviewNotes = reviewNotes;
   }
 
   if (role && ['student', 'admin', 'driver'].includes(role)) {
@@ -49,23 +51,51 @@ const updateUserStatus = asyncHandler(async (req, res) => {
 
   await user.save();
 
-  const sanitizedUser = {
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    universityId: user.universityId,
-    universityIdStatus: user.universityIdStatus,
-    universityIdImage: user.universityIdImage,
-    universityIdVerifiedAt: user.universityIdVerifiedAt,
-    universityIdReviewNotes: user.universityIdReviewNotes,
-    noShowCount: user.noShowCount,
-    waitingListPosition: user.waitingListPosition,
-    isActive: user.isActive,
-    createdAt: user.createdAt,
-  };
-
-  res.json({ user: sanitizedUser });
+  res.json({ user: user.toSafeObject() });
 });
 
-module.exports = { getUsers, updateUserStatus };
+const createTrip = asyncHandler(async (req, res) => {
+  const { title, pickupPoint, destination, busNumber, capacity, departureTime, driver } = req.body;
+  if (!title || !pickupPoint || !destination || !busNumber || !capacity || !departureTime) {
+    return res.status(400).json({ message: 'Trip title, route, bus, capacity, and departure time are required' });
+  }
+
+  const trip = await Trip.create({
+    title,
+    pickupPoint,
+    destination,
+    busNumber,
+    capacity,
+    departureTime,
+    driver: driver || undefined,
+  });
+
+  res.status(201).json({ trip });
+});
+
+const getTrips = asyncHandler(async (req, res) => {
+  const trips = await Trip.find({ isActive: true }).populate('driver', 'name email').sort({ departureTime: 1 });
+  res.json({ trips });
+});
+
+const getAnalytics = asyncHandler(async (req, res) => {
+  const [bookingsCount, pendingUsers, noShowStats, tripsCount, confirmedBookings, waitingBookings] = await Promise.all([
+    Booking.countDocuments(),
+    User.countDocuments({ status: 'pending' }),
+    User.aggregate([{ $group: { _id: null, total: { $sum: '$noShowCount' } } }]),
+    Trip.countDocuments({ isActive: true }),
+    Booking.countDocuments({ status: 'confirmed' }),
+    Booking.countDocuments({ status: 'waiting' }),
+  ]);
+
+  res.json({
+    bookingsCount,
+    pendingUsers,
+    noShowStats: noShowStats[0]?.total || 0,
+    tripsCount,
+    confirmedBookings,
+    waitingBookings,
+  });
+});
+
+module.exports = { getUsers, updateUserStatus, createTrip, getTrips, getAnalytics };

@@ -5,8 +5,11 @@ export interface UserProfile {
   name: string;
   email: string;
   role: UserRole;
+  status: 'pending' | 'approved' | 'rejected';
   universityId: string;
-  universityIdStatus: 'pending' | 'verified' | 'rejected';
+  universityIdStatus: 'pending' | 'approved' | 'verified' | 'rejected';
+  idCardImage?: string;
+  paymentProofImage?: string;
   universityIdImage?: string;
   noShowCount?: number;
   waitingListPosition?: number | null;
@@ -14,5 +17,4 @@ export interface UserProfile {
 
 export interface AuthResponse {
   user: UserProfile;
-  token: string;
 }

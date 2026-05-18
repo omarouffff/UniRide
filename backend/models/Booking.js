@@ -3,9 +3,11 @@ const mongoose = require('mongoose');
 const bookingSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    trip: { type: mongoose.Schema.Types.ObjectId, ref: 'Trip' },
     pickupPoint: { type: String, required: true, trim: true },
     destination: { type: String, required: true, trim: true },
     travelDate: { type: Date, required: true },
+    cancelledAt: { type: Date },
     seat: { type: String },
     status: {
       type: String,
