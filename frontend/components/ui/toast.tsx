@@ -55,7 +55,7 @@ const ToastProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-const ToastViewport = React.forwardRef<HTMLDivElement, ToastPrimitives.ToastViewportProps>((props, ref) => (
+const ToastViewport = React.forwardRef<any, ToastPrimitives.ToastViewportProps>((props, ref) => (
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
@@ -67,11 +67,18 @@ const ToastViewport = React.forwardRef<HTMLDivElement, ToastPrimitives.ToastView
 ));
 ToastViewport.displayName = 'ToastViewport';
 
-const Toast = React.forwardRef<HTMLDivElement, ToastPrimitives.ToastProps>(({ className, ...props }, ref) => (
+interface ToastProps extends ToastPrimitives.ToastProps {
+  variant?: ToastVariant;
+}
+
+const Toast = React.forwardRef<any, ToastProps>(({ className, variant, ...props }, ref) => (
   <ToastPrimitives.Toast
     ref={ref}
     className={cn(
       'grid gap-2 rounded-3xl border border-slate-800 bg-slate-950 p-4 shadow-xl shadow-slate-950/40',
+      variant === 'success' && 'border-emerald-500',
+      variant === 'error' && 'border-rose-500',
+      variant === 'info' && 'border-sky-500',
       'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-80',
       className
     )}

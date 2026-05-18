@@ -1,6 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Booking = require('../models/Booking');
 const { allocateBooking } = require('../services/bookingService');
+const { getRouteRoomName } = require('../utils/socketRooms');
 
 const createBooking = asyncHandler(async (req, res) => {
   const { pickupPoint, destination, travelDate } = req.body;
@@ -14,6 +15,34 @@ const createBooking = asyncHandler(async (req, res) => {
     destination,
     travelDate,
   });
+
+  const io = req.app.get('io');
+  const bookingPayload = {
+    id: booking._id,
+    pickupPoint: booking.pickupPoint,
+    destination: booking.destination,
+    route: booking.route,
+    travelDate: booking.travelDate,
+    status: booking.status,
+    seat: booking.seat || null,
+    waitingPosition: booking.waitingPosition || null,
+  };
+
+  if (io) {
+    io.to(req.user._id.toString()).emit('bookingUpdate', bookingPayload);
+
+    const confirmedCount = await Booking.countDocuments({ travelDate: booking.travelDate, status: 'confirmed' });
+    const waitingCount = await Booking.countDocuments({ travelDate: booking.travelDate, status: 'waiting' });
+    const routeRoom = getRouteRoomName(booking.route, booking.travelDate);
+
+    if (routeRoom) {
+      io.to(routeRoom).emit('routeUpdate', {
+        availableSeats: Math.max(0, 40 - confirmedCount),
+        confirmedCount,
+        waitingCount,
+      });
+    }
+  }
 
   res.status(201).json({ booking });
 });

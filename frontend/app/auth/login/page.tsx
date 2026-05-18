@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormField, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAuthStore } from '@/store/useAuthStore';
-import { useToast } from '@/components/ui/toast';
+import { ToastProvider, useToast } from '@/components/ui/toast';
 
 const loginSchema = z.object({
   email: z.string().email('Enter a valid email'),
