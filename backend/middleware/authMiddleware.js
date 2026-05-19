@@ -1,14 +1,11 @@
-const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
+const { verifyAccessToken } = require('../services/tokenService');
 
 const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
   } else if (req.cookies && req.cookies.token) {
     token = req.cookies.token;
@@ -19,14 +16,21 @@ const protect = asyncHandler(async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-passwordHash');
-    if (!req.user) {
+    const decoded = verifyAccessToken(token);
+    const user = await User.findById(decoded.id).select('-passwordHash -twoFactorSecret');
+    if (!user) {
       return res.status(401).json({ message: 'User not found' });
     }
-    if (!req.user.isActive) {
+    const session = user.getSession(decoded.sid);
+    if (!session) {
+      return res.status(401).json({ message: 'Session invalid or expired' });
+    }
+    if (!user.isActive) {
       return res.status(403).json({ message: 'Account is banned. Contact administration.', status: 'banned' });
     }
+    session.lastUsedAt = new Date();
+    await user.save();
+    req.user = user;
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Invalid or expired token' });

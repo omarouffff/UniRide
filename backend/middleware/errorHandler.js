@@ -1,3 +1,5 @@
+const Sentry = require('@sentry/node');
+
 function notFound(req, res, next) {
   const error = new Error(`Not Found - ${req.originalUrl}`);
   res.status(404);
@@ -5,6 +7,7 @@ function notFound(req, res, next) {
 }
 
 function errorHandler(err, req, res, next) {
+  Sentry.captureException(err);
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   res.status(statusCode).json({
     message: err.message,

@@ -13,7 +13,7 @@ async function initRedis() {
     url,
     socket: {
       reconnectStrategy: (retries) => {
-        if (retries >= 5) {
+        if (retries >= Number(process.env.REDIS_RECONNECT_MAX || 5)) {
           return new Error('Redis reconnect limit reached');
         }
         return 1000;
@@ -23,12 +23,14 @@ async function initRedis() {
 
   redisClient.on('error', (err) => console.error('Redis Client Error', err));
   redisClient.on('connect', () => console.log('ℹ️ Redis client connected'));
+  redisClient.on('ready', () => console.log('✅ Redis ready'));
+  redisClient.on('reconnecting', () => console.warn('Redis reconnecting...'));
 
   try {
     await redisClient.connect();
     console.log('✅ Redis connected');
   } catch (error) {
-    console.warn('⚠️ Redis connection failed. Starting backend without Redis.');
+    console.warn('⚠️ Redis connection failed. Starting backend without Redis.', error.message);
     redisClient = null;
   }
 }

@@ -1,8 +1,16 @@
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
-    typedRoutes: true
-  }
+    typedRoutes: true,
+  },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.cloudinary.com',
+      },
+    ],
+  },
 };
 
 export default nextConfig;

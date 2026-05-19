@@ -17,6 +17,7 @@ function uploadBuffer(buffer, folder) {
         resource_type: 'image',
         quality: 'auto',
         fetch_format: 'auto',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
       },
       (error, result) => {
         if (error) {
@@ -48,6 +49,7 @@ async function uploadToCloudinary(file, folder) {
       resource_type: 'image',
       quality: 'auto',
       fetch_format: 'auto',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
     });
   }
 

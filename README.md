@@ -49,3 +49,12 @@ A production-ready university transportation platform with a modern Next.js fron
 - Booking pages
 - Profile and QR pages
 - Toast notifications and protected routing
+
+## Security and deployment hardening
+- Cookie-based JWT auth with refresh token rotation and secure HttpOnly cookies
+- CSRF protection plus XSS and NoSQL injection sanitization
+- Redis-backed rate limiting, IP throttling, login lockout, and brute force protections
+- Sentry request error tracking and centralized Winston logging
+- Version mismatch detection for frontend/backend deployment skew protection
+- Cloudinary upload restrictions and MIME validation
+- Health, keep-alive, and readiness endpoints for production stability
