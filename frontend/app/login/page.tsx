@@ -37,8 +37,26 @@ export default function LoginPage() {
       router.push('/dashboard');
     } catch (error: any) {
       const message = error?.response?.data?.message || 'Check your credentials.';
-      toast({ variant: 'error', title: 'Login blocked', description: message });
-      if (error?.response?.data?.status === 'pending') {
+      const status = error?.response?.status;
+      const dataStatus = error?.response?.data?.status;
+
+      let title = 'Login Failed';
+      if (status === 423) {
+        title = 'Account Locked';
+      } else if (status === 403) {
+        if (dataStatus === 'pending') {
+          title = 'Verification Pending';
+        } else if (dataStatus === 'rejected') {
+          title = 'Account Rejected';
+        } else if (dataStatus === 'banned') {
+          title = 'Account Suspended';
+        } else {
+          title = 'Verification Required';
+        }
+      }
+
+      toast({ variant: 'error', title, description: message });
+      if (dataStatus === 'pending') {
         router.push('/pending-approval');
       }
     } finally {
