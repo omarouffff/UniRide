@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api from '@/lib/api';
+import { getSocketUrl } from '@/lib/apiConfig';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -60,9 +61,8 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (!user) return;
 
-    // Resolve socket server URL from api client base path
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-    const socketHost = apiBase.replace('/api', '');
+    const socketHost = getSocketUrl();
+    if (!socketHost) return;
 
     const socket = io(socketHost, {
       withCredentials: true,

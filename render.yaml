@@ -33,6 +33,10 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: ALLOW_VERCEL_PREVIEWS
+        value: "true"
       - key: PAYMOB_API_KEY
         sync: false
       - key: FAWRY_MERCHANT_CODE
@@ -44,8 +48,6 @@ services:
       - key: EMAIL_PASS
         sync: false
       - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: ALLOWED_ORIGINS
         sync: false
       - key: RATE_LIMIT_WINDOW_MS
         value: "900000"

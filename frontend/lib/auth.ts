@@ -46,8 +46,12 @@ export function extractApiErrorMessage(error: unknown, fallback = 'An unexpected
     return apiMessage;
   }
 
-  if (axiosError.code === 'ERR_NETWORK') {
-    return 'Unable to reach the server. Check your API URL and network connection.';
+  if (axiosError.code === 'ERR_NETWORK' || axiosError.code === 'ECONNABORTED') {
+    const apiUrl =
+      typeof process !== 'undefined'
+        ? process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || '(not set — using localhost in dev only)'
+        : '';
+    return `Unable to reach the server at ${apiUrl || 'the configured API URL'}. Verify NEXT_PUBLIC_API_URL on Vercel and that the backend is online (/api/health).`;
   }
 
   if (axiosError.message && !axiosError.response) {

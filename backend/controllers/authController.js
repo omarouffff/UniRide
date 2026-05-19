@@ -20,7 +20,7 @@ function createTokenCookieOptions(maxAge) {
     secure,
     sameSite: secure ? 'none' : 'lax',
     maxAge,
-    path: '/api',
+    path: '/',
   };
 }
 

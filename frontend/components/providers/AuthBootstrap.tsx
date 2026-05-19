@@ -1,7 +1,8 @@
 'use client';
 
 import { ReactNode, useEffect } from 'react';
-import api, { refreshCsrfToken } from '@/lib/api';
+import api, { apiBaseUrl, refreshCsrfToken } from '@/lib/api';
+import { logApiConfig } from '@/lib/apiConfig';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export default function AuthBootstrap({ children }: { children: ReactNode }) {
@@ -13,6 +14,14 @@ export default function AuthBootstrap({ children }: { children: ReactNode }) {
     let active = true;
 
     const bootstrap = async () => {
+      logApiConfig('bootstrap');
+      if (!apiBaseUrl) {
+        console.error('[UniRide] API URL is not configured. Set NEXT_PUBLIC_API_URL in Vercel environment variables.');
+        setLoading(false);
+        setHydrated(true);
+        return;
+      }
+
       await refreshCsrfToken();
 
       try {

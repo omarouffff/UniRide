@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getAccessToken, getRefreshToken, saveAuthTokens } from '@/lib/auth';
+import { getApiBaseUrl, logApiConfig } from '@/lib/apiConfig';
 import { useAuthStore } from '@/store/useAuthStore';
 
 const AUTH_ROUTES_SKIP_REFRESH = [
@@ -16,15 +17,20 @@ function shouldSkipAuthRefresh(url?: string) {
   return AUTH_ROUTES_SKIP_REFRESH.some((route) => url.includes(route));
 }
 
-const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-const base = rawBase.endsWith('/api') ? rawBase : `${rawBase.replace(/\/$/, '')}/api`;
+const base = getApiBaseUrl();
 const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || 'dev';
+
+if (typeof window !== 'undefined') {
+  logApiConfig('init');
+}
 
 const api = axios.create({
   baseURL: base,
   withCredentials: true,
+  timeout: 30000,
   headers: {
     'x-client-version': appVersion,
+    'Content-Type': 'application/json',
   },
 });
 
@@ -37,6 +43,9 @@ export async function refreshCsrfToken() {
     api.defaults.headers.common['x-csrf-token'] = csrfToken;
     return csrfToken;
   } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[UniRide] Failed to fetch CSRF token', error);
+    }
     return null;
   }
 }
@@ -54,15 +63,12 @@ api.interceptors.request.use((config) => {
 });
 
 let isRefreshing = false;
-let failedQueue: any[] = [];
+let failedQueue: Array<{ resolve: () => void; reject: (err: unknown) => void }> = [];
 
-const processQueue = (error: any) => {
+const processQueue = (error: unknown) => {
   failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve();
-    }
+    if (error) prom.reject(error);
+    else prom.resolve();
   });
   failedQueue = [];
 };
@@ -72,6 +78,14 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    if (process.env.NODE_ENV === 'development' && error.code === 'ERR_NETWORK') {
+      console.error('[UniRide] Network error', {
+        baseURL: api.defaults.baseURL,
+        url: originalRequest?.url,
+        message: error.message,
+      });
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry && !shouldSkipAuthRefresh(originalRequest.url)) {
       if (originalRequest.url === '/auth/refresh') {
         return Promise.reject(error);
@@ -79,14 +93,10 @@ api.interceptors.response.use(
 
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
+          failedQueue.push({ resolve: resolve as () => void, reject });
         })
-          .then(() => {
-            return api(originalRequest);
-          })
-          .catch((err) => {
-            return Promise.reject(err);
-          });
+          .then(() => api(originalRequest))
+          .catch((err) => Promise.reject(err));
       }
 
       originalRequest._retry = true;
@@ -94,7 +104,10 @@ api.interceptors.response.use(
 
       try {
         const storedRefreshToken = getRefreshToken();
-        const refreshResponse = await api.post('/auth/refresh', storedRefreshToken ? { refreshToken: storedRefreshToken } : undefined);
+        const refreshResponse = await api.post(
+          '/auth/refresh',
+          storedRefreshToken ? { refreshToken: storedRefreshToken } : undefined
+        );
         if (refreshResponse.data?.accessToken || refreshResponse.data?.refreshToken) {
           saveAuthTokens(refreshResponse.data.accessToken, refreshResponse.data.refreshToken);
         }
@@ -116,4 +129,5 @@ api.interceptors.response.use(
   }
 );
 
+export { base as apiBaseUrl };
 export default api;
