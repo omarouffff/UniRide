@@ -275,15 +275,12 @@ export default function MyTripsPage() {
 
               {/* QR Image wrapper */}
               <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 w-60 h-60 mx-auto flex items-center justify-center">
-                {selectedBooking.qrPayload ? (
-                  <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(selectedBooking.qrPayload)}`}
-                    alt="Boarding QR Code" 
-                    className="w-full h-auto rounded-lg"
-                  />
-                ) : (
-                  <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                )}
+                <p className="text-sm text-slate-400 px-2">
+                  Open your boarding pass to view the official encrypted QR code from UniRide.
+                </p>
+                <Button type="button" className="w-full" onClick={() => { setQrModalOpen(false); router.push('/qr'); }}>
+                  View boarding QR
+                </Button>
               </div>
 
               <div className="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80 text-left text-xs text-slate-300 space-y-1.5">

@@ -1,7 +1,8 @@
 // Set dummy env variables before loading modules to pass validation checks
 process.env.MONGO_URI = 'mongodb://localhost:27017/uniride-test';
-process.env.JWT_SECRET = 'test-jwt-secret-key-super-secure';
-process.env.QR_ENCRYPTION_SECRET = 'test-qr-secret-key-32-chars-long';
+process.env.JWT_SECRET = 'test-jwt-secret-key-super-secure-32chars-min';
+process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-key-super-secure-32';
+process.env.QR_ENCRYPTION_SECRET = 'test-qr-secret-key-32-chars-long-enough!!';
 process.env.PAYMOB_API_KEY = 'test-paymob-api-key';
 process.env.PAYMOB_HMAC_SECRET = 'test-paymob-hmac-secret';
 process.env.PAYMOB_INTEGRATION_ID = '12345';

@@ -11,7 +11,8 @@ A production-ready university transportation platform with a modern Next.js fron
 
 ### Backend
 1. Copy `backend/.env.example` to `backend/.env`.
-2. Configure MongoDB, JWT secret, Cloudinary, Redis, and frontend URL.
+2. Generate secrets: `cd backend && node scripts/generateSecrets.js`
+3. Configure MongoDB, JWT secrets, Resend, Cloudinary, Redis, and frontend URL.
 3. Install dependencies:
    ```bash
    cd backend
@@ -34,6 +35,12 @@ A production-ready university transportation platform with a modern Next.js fron
    ```bash
    npm run dev
    ```
+
+## Production deployment
+
+See **[PRODUCTION_SETUP.md](./PRODUCTION_SETUP.md)** and **[DEPLOYMENT.md](./DEPLOYMENT.md)** for Render, Vercel, MongoDB Atlas, and environment configuration.
+
+**Never commit real API keys or database passwords.** Set secrets only in your hosting dashboard.
 
 ## Phase 1 completed
 - Backend auth system

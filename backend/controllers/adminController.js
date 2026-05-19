@@ -142,8 +142,54 @@ const createTrip = asyncHandler(async (req, res) => {
 });
 
 const getTrips = asyncHandler(async (req, res) => {
-  const trips = await Trip.find({ isActive: true }).populate('driver', 'name email').sort({ departureTime: 1 });
-  res.json({ trips });
+  const { active, page = 1, limit = 50, driver } = req.query;
+  const filter = {};
+  if (active !== 'false') filter.isActive = true;
+  if (driver) filter.driver = driver;
+
+  const skip = (Math.max(Number(page), 1) - 1) * Math.min(Number(limit), 100);
+  const [trips, total] = await Promise.all([
+    Trip.find(filter).populate('driver', 'name email').sort({ departureTime: 1 }).skip(skip).limit(Math.min(Number(limit), 100)),
+    Trip.countDocuments(filter),
+  ]);
+
+  res.json({ trips, total, page: Number(page), limit: Number(limit) });
+});
+
+const updateTrip = asyncHandler(async (req, res) => {
+  const trip = await Trip.findById(req.params.id);
+  if (!trip) {
+    return res.status(404).json({ message: 'Trip not found' });
+  }
+
+  const fields = ['title', 'pickupPoint', 'destination', 'busNumber', 'capacity', 'departureTime', 'driver', 'isActive'];
+  fields.forEach((field) => {
+    if (req.body[field] !== undefined) trip[field] = req.body[field];
+  });
+
+  await trip.save();
+  res.json({ trip });
+});
+
+const deleteTrip = asyncHandler(async (req, res) => {
+  const trip = await Trip.findById(req.params.id);
+  if (!trip) {
+    return res.status(404).json({ message: 'Trip not found' });
+  }
+
+  const activeBookings = await Booking.countDocuments({
+    trip: trip._id,
+    status: { $in: ['confirmed', 'waiting'] },
+  });
+
+  if (activeBookings > 0) {
+    trip.isActive = false;
+    await trip.save();
+    return res.json({ message: 'Trip deactivated (has active bookings)', trip });
+  }
+
+  await Trip.deleteOne({ _id: trip._id });
+  res.json({ message: 'Trip deleted successfully' });
 });
 
 const getAnalytics = asyncHandler(async (req, res) => {
@@ -193,4 +239,18 @@ const getBookings = asyncHandler(async (req, res) => {
   res.json({ bookings });
 });
 
-module.exports = { getUsers, getPendingUsers, updateUserStatus, approveUser, rejectUser, banUser, deleteUser, createTrip, getTrips, getAnalytics, getBookings };
+module.exports = {
+  getUsers,
+  getPendingUsers,
+  updateUserStatus,
+  approveUser,
+  rejectUser,
+  banUser,
+  deleteUser,
+  createTrip,
+  getTrips,
+  updateTrip,
+  deleteTrip,
+  getAnalytics,
+  getBookings,
+};

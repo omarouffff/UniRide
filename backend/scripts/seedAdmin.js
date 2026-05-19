@@ -5,7 +5,12 @@ const User = require('../models/User');
 dotenv.config();
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@uniride.local';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123456';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!ADMIN_PASSWORD) {
+  console.error('ADMIN_PASSWORD is required. Example: ADMIN_PASSWORD=YourSecurePass npm run seed:admin');
+  process.exit(1);
+}
 
 async function seedAdmin() {
   const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;

@@ -22,6 +22,7 @@ const bookingRoutes = require('./routes/bookingRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const driverRoutes = require('./routes/driverRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { getRouteRoomName } = require('./utils/socketRooms');
 const { logger } = require('./utils/logger');
@@ -161,7 +162,11 @@ app.use((req, res, next) => {
 });
 
 app.use((req, res, next) => {
-  if (req.path === '/api/payments/webhook' || process.env.NODE_ENV === 'test') {
+  if (
+    req.path === '/api/payments/webhook' ||
+    req.path === '/api/payments/fawry/webhook' ||
+    process.env.NODE_ENV === 'test'
+  ) {
     return next();
   }
   csrf({
@@ -286,6 +291,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/driver', driverRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use(notFound);
 app.use(Sentry.Handlers.errorHandler());
@@ -296,6 +302,15 @@ const PORT = process.env.PORT || 4000;
 async function start() {
   await connectDatabase();
   await initRedis();
+
+  if (process.env.ENABLE_NO_SHOW_CRON !== 'false') {
+    const { processNoShows } = require('./jobs/noShowCron');
+    const intervalMs = Number(process.env.NO_SHOW_CRON_INTERVAL_MS || 15 * 60 * 1000);
+    setInterval(() => {
+      processNoShows().catch((err) => logger.error('No-show cron failed', { error: err.message }));
+    }, intervalMs);
+    logger.info('No-show cron scheduled', { intervalMs });
+  }
 
   server.listen(PORT, '0.0.0.0', () => {
     logger.info(`Backend server listening on port ${PORT}`, {

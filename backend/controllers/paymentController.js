@@ -239,11 +239,82 @@ const verifyCashPayment = asyncHandler(async (req, res) => {
   res.json({ message: `Payment verified as ${status}`, payment });
 });
 
+const handleFawryWebhook = asyncHandler(async (req, res) => {
+  const { merchantRefNumber, fawryRefNumber, paymentStatus, messageSignature } = req.body;
+
+  if (!merchantRefNumber || !paymentStatus) {
+    return res.status(400).json({ message: 'Invalid Fawry webhook payload' });
+  }
+
+  const securityKey = process.env.FAWRY_SECURITY_KEY;
+  if (!securityKey) {
+    return res.status(500).json({ message: 'Fawry security key not configured' });
+  }
+
+  if (messageSignature) {
+    const crypto = require('crypto');
+    const expected = crypto
+      .createHash('sha256')
+      .update(`${merchantRefNumber}${fawryRefNumber || ''}${paymentStatus}${securityKey}`)
+      .digest('hex');
+    if (expected !== messageSignature) {
+      console.warn('Fawry webhook signature verification failed');
+      return res.status(401).json({ message: 'Invalid signature' });
+    }
+  }
+
+  const payment = await Payment.findOne({ reference: merchantRefNumber, method: 'fawry' });
+  if (!payment) {
+    return res.status(404).json({ message: 'Payment not found' });
+  }
+
+  const isPaid = String(paymentStatus).toUpperCase() === 'PAID';
+  payment.status = isPaid ? 'completed' : 'failed';
+  payment.metadata = { ...payment.metadata, fawryRefNumber, webhookAt: new Date() };
+  await payment.save();
+
+  if (isPaid && payment.booking) {
+    const booking = await Booking.findById(payment.booking);
+    if (booking) {
+      booking.status = 'confirmed';
+      if (!booking.qrPayload) {
+        const { encryptQrPayload } = require('../utils/qrPayload');
+        booking.qrPayload = encryptQrPayload({
+          bookingId: booking._id,
+          userId: booking.user,
+          tripId: booking.trip,
+          seat: booking.seat,
+        });
+      }
+      await booking.save();
+
+      const io = req.app.get('io');
+      const { notifyPaymentSuccess, notifyBookingConfirmed } = require('../services/notificationService');
+      const user = await require('../models/User').findById(booking.user);
+      if (user) {
+        await notifyPaymentSuccess(user._id, payment, io).catch(() => {});
+        await notifyBookingConfirmed(user._id, booking, io).catch(() => {});
+      }
+      if (io) {
+        io.to(booking.user.toString()).emit('bookingUpdate', {
+          id: booking._id,
+          status: booking.status,
+          seat: booking.seat || null,
+          qrPayload: booking.qrPayload || null,
+        });
+      }
+    }
+  }
+
+  res.status(200).json({ success: true, status: payment.status });
+});
+
 module.exports = {
   createPayment,
   getMyPayments,
   getAllPayments,
   initializePaymob,
   handlePaymobWebhook,
-  verifyCashPayment
+  handleFawryWebhook,
+  verifyCashPayment,
 };

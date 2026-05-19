@@ -1,4 +1,7 @@
 process.env.MONGO_URI = 'mongodb://localhost:27017/uniride-test';
+process.env.JWT_SECRET = 'test-jwt-secret-key-super-secure-32chars-min';
+process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-key-super-secure-32';
+process.env.QR_ENCRYPTION_SECRET = 'test-qr-secret-key-32-chars-long-enough!!';
 process.env.JWT_SECRET = 'test-jwt-secret-key-super-secure';
 process.env.QR_ENCRYPTION_SECRET = 'test-qr-secret-key-32-chars-long';
 process.env.PAYMOB_API_KEY = 'test-paymob-api-key';

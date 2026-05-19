@@ -3,7 +3,12 @@ const speakeasy = require('speakeasy');
 const User = require('../models/User');
 const UniversityVerification = require('../models/UniversityVerification');
 const { uploadToCloudinary } = require('../services/cloudinaryService');
-const { sendMail, createEmailTemplate } = require('../services/emailService');
+const {
+  sendVerificationEmail: sendVerificationEmailViaResend,
+  sendPasswordResetEmail,
+  sendPasswordChangedEmail,
+} = require('../services/emailService');
+const { notifyPasswordChanged } = require('../services/notificationService');
 const {
   generateAccessToken,
   generateRefreshToken,
@@ -34,19 +39,13 @@ function clearTokenCookies(res) {
   res.clearCookie('refreshToken', createTokenCookieOptions(0));
 }
 
+function getFrontendUrl() {
+  return (process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:3000').replace(/\/$/, '');
+}
+
 async function sendVerificationEmail(user, verificationToken) {
-  const frontendUrl = process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:3000';
-  const verifyUrl = `${frontendUrl.replace(/\/$/, '')}/auth/verify-university-id?token=${verificationToken}`;
-  await sendMail({
-    to: user.email,
-    subject: 'Verify your UniRide email',
-    html: createEmailTemplate({
-      heading: 'Confirm your email',
-      body: 'Please verify your email address to secure your UniRide account and complete registration.',
-      actionText: 'Verify Email',
-      actionUrl: verifyUrl,
-    }),
-  });
+  const verifyUrl = `${getFrontendUrl()}/auth/verify-email?token=${verificationToken}`;
+  await sendVerificationEmailViaResend(user, verifyUrl);
 }
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -420,18 +419,8 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
     user.passwordResetToken = hashToken(resetToken);
     user.passwordResetExpires = Date.now() + 60 * 60 * 1000;
     await user.save();
-    const frontendUrl = process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:3000';
-    const resetUrl = `${frontendUrl.replace(/\/$/, '')}/auth/reset-password?token=${resetToken}`;
-    await sendMail({
-      to: user.email,
-      subject: 'UniRide password reset request',
-      html: createEmailTemplate({
-        heading: 'Reset your password',
-        body: 'A request was made to reset your UniRide account password. Use the link below to continue.',
-        actionText: 'Reset password',
-        actionUrl: resetUrl,
-      }),
-    }).catch((error) => {
+    const resetUrl = `${getFrontendUrl()}/auth/reset-password?token=${resetToken}`;
+    await sendPasswordResetEmail(user, resetUrl).catch((error) => {
       console.warn('Password reset email error:', error.message);
     });
   }
@@ -455,6 +444,11 @@ const resetPassword = asyncHandler(async (req, res) => {
   await user.revokeAllSessions();
   await user.save();
   auditEvent('auth.password-reset', user._id, { ip: req.ip });
+
+  const io = req.app.get('io');
+  await notifyPasswordChanged(user._id, io).catch(() => {});
+  await sendPasswordChangedEmail(user).catch(() => {});
+
   res.json({ message: 'Password has been reset successfully' });
 });
 

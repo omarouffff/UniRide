@@ -1,6 +1,7 @@
 const PaymentModel = require('../models/Payment');
 const BookingModel = require('../models/Booking');
 const axios = require('axios');
+const { getFawryBaseUrl } = require('../config/fawry');
 
 class PaymentService {
   // Initialize Paymob payment
@@ -92,7 +93,7 @@ class PaymentService {
   async initializeFawryPayment(userId, bookingId, amount) {
     try {
       const chargeResponse = await axios.post(
-        'https://www.atfawry.com/api/v2/charges/charge',
+        `${getFawryBaseUrl()}/ECommerceWeb/Fawry/payments/charge`,
         {
           merchantCode: process.env.FAWRY_MERCHANT_CODE,
           merchantRefNum: bookingId,
@@ -186,7 +187,7 @@ class PaymentService {
   async verifyFawryPayment(chargeId, transactionId) {
     try {
       const queryResponse = await axios.post(
-        'https://www.atfawry.com/api/v2/charges/query',
+        `${getFawryBaseUrl()}/ECommerceWeb/Fawry/payments/status`,
         {
           merchantCode: process.env.FAWRY_MERCHANT_CODE,
           chargeId,

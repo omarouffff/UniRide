@@ -40,21 +40,39 @@ export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
   const [socketConnected, setSocketConnected] = useState(false);
 
-  // Load persistent notifications from local storage on mount
   useEffect(() => {
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    const saved = localStorage.getItem(`uniride_notifications_${user.id}`);
-    if (saved) {
-      try {
-        setNotifications(JSON.parse(saved));
-      } catch (err) {
-        console.error('Error parsing notifications:', err);
-      }
-    }
+    let active = true;
+    api
+      .get('/notifications')
+      .then((res) => {
+        if (!active) return;
+        const items: NotificationItem[] = (res.data.notifications || []).map((n: {
+          id: string;
+          title: string;
+          message: string;
+          read: boolean;
+          type?: string;
+          createdAt: string;
+        }) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          read: n.read,
+          timestamp: n.createdAt,
+          type: n.type === 'payment_success' || n.type === 'booking_confirmed' ? 'success' : 'info',
+        }));
+        setNotifications(items);
+      })
+      .catch((err) => console.error('Failed to load notifications:', err));
+
+    return () => {
+      active = false;
+    };
   }, [user, router]);
 
   // Connect to Socket.io for real-time updates
@@ -79,8 +97,20 @@ export default function NotificationsPage() {
       setSocketConnected(false);
     });
 
-    // Listen to real-time booking transitions
-    socket.on('bookingUpdate', (data: any) => {
+    socket.on('notification', (data: { id: string; title: string; message: string; read: boolean; createdAt: string; type?: string }) => {
+      const newNotification: NotificationItem = {
+        id: data.id,
+        title: data.title,
+        message: data.message,
+        timestamp: data.createdAt || new Date().toISOString(),
+        read: data.read,
+        type: data.type === 'payment_success' || data.type === 'booking_confirmed' ? 'success' : 'info',
+      };
+      setNotifications((current) => [newNotification, ...current.filter((n) => n.id !== data.id)]);
+      toast({ variant: 'success', title: data.title, description: data.message });
+    });
+
+    socket.on('bookingUpdate', (data: { status?: string; seat?: string }) => {
       // Build visual notification card
       const newNotification: NotificationItem = {
         id: `noti-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -94,11 +124,7 @@ export default function NotificationsPage() {
         actionUrl: '/my-trips'
       };
 
-      setNotifications((current) => {
-        const updated = [newNotification, ...current];
-        localStorage.setItem(`uniride_notifications_${user.id}`, JSON.stringify(updated));
-        return updated;
-      });
+      setNotifications((current) => [newNotification, ...current]);
 
       // Browser Web Audio Beeper for dynamic alerting
       try {
@@ -129,23 +155,24 @@ export default function NotificationsPage() {
   }, [user, toast]);
 
   // Mark specific notification as read
-  const markAsRead = (id: string) => {
+  const markAsRead = async (id: string) => {
     if (!user) return;
-    setNotifications((current) => {
-      const updated = current.map((n) => (n.id === id ? { ...n, read: true } : n));
-      localStorage.setItem(`uniride_notifications_${user.id}`, JSON.stringify(updated));
-      return updated;
-    });
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      setNotifications((current) => current.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    } catch {
+      /* ignore */
+    }
   };
 
-  // Mark all notifications as read
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
     if (!user || notifications.length === 0) return;
-    setNotifications((current) => {
-      const updated = current.map((n) => ({ ...n, read: true }));
-      localStorage.setItem(`uniride_notifications_${user.id}`, JSON.stringify(updated));
-      return updated;
-    });
+    try {
+      await api.patch('/notifications/read-all');
+      setNotifications((current) => current.map((n) => ({ ...n, read: true })));
+    } catch {
+      /* ignore */
+    }
     toast({
       variant: 'success',
       title: 'Ledger updated',

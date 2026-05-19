@@ -5,7 +5,8 @@ const {
   getAllPayments,
   initializePaymob,
   handlePaymobWebhook,
-  verifyCashPayment
+  handleFawryWebhook,
+  verifyCashPayment,
 } = require('../controllers/paymentController');
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
@@ -14,6 +15,7 @@ const router = express.Router();
 
 // Public webhook route (Paymob needs this unauthenticated)
 router.post('/webhook', handlePaymobWebhook);
+router.post('/fawry/webhook', handleFawryWebhook);
 
 // Protected routes (require valid session token)
 router.use(protect);

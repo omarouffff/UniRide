@@ -1,8 +1,21 @@
 const crypto = require('crypto');
 
+function getQrSecret() {
+  const secret = process.env.QR_ENCRYPTION_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('QR_ENCRYPTION_SECRET is required in production');
+    }
+    throw new Error('QR_ENCRYPTION_SECRET is not configured');
+  }
+  if (secret.includes('replace-with') || secret.length < 32) {
+    throw new Error('QR_ENCRYPTION_SECRET must be a strong random string (32+ characters)');
+  }
+  return secret;
+}
+
 function encryptQrPayload(payload) {
-  const secret = process.env.QR_ENCRYPTION_SECRET || process.env.JWT_SECRET || 'uniride-development-secret';
-  const key = crypto.createHash('sha256').update(secret).digest();
+  const key = crypto.createHash('sha256').update(getQrSecret()).digest();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const encrypted = Buffer.concat([cipher.update(JSON.stringify(payload), 'utf8'), cipher.final()]);
@@ -12,8 +25,7 @@ function encryptQrPayload(payload) {
 }
 
 function decryptQrPayload(token) {
-  const secret = process.env.QR_ENCRYPTION_SECRET || process.env.JWT_SECRET || 'uniride-development-secret';
-  const key = crypto.createHash('sha256').update(secret).digest();
+  const key = crypto.createHash('sha256').update(getQrSecret()).digest();
   const raw = Buffer.from(token, 'base64url');
   const iv = raw.subarray(0, 12);
   const tag = raw.subarray(12, 28);
