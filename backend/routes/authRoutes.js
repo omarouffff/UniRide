@@ -8,6 +8,7 @@ const {
   updateProfile,
   submitUniversityId,
   verifyEmail,
+  resendVerification,
   requestPasswordReset,
   resetPassword,
   setupTwoFactor,
@@ -40,6 +41,7 @@ router.post('/login', validateRequest(loginSchema), loginUser);
 router.post('/refresh', refreshToken);
 router.post('/logout', logoutUser);
 router.post('/verify-email', validateRequest(verifyEmailSchema), verifyEmail);
+router.post('/resend-verification', validateRequest(passwordResetRequestSchema), resendVerification);
 router.post('/password-reset/request', validateRequest(passwordResetRequestSchema), requestPasswordReset);
 router.post('/password-reset/confirm', validateRequest(passwordResetSchema), resetPassword);
 router.post('/2fa/setup', protect, setupTwoFactor);

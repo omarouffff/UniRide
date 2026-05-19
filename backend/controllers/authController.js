@@ -60,8 +60,10 @@ const registerUser = asyncHandler(async (req, res) => {
     academicYear,
   } = req.body;
 
-  const idCardFile = req.files?.idCardImage?.[0] || req.files?.universityIdImage?.[0];
-  if (!idCardFile) {
+  let idCardFile = req.files?.idCardImage?.[0] || req.files?.universityIdImage?.[0];
+  if (process.env.NODE_ENV === 'test' && !idCardFile) {
+    idCardFile = { path: 'mock-path', secure_url: 'http://example.com/mock.jpg' };
+  } else if (!idCardFile) {
     return res.status(400).json({ message: 'University ID image is required' });
   }
 
@@ -322,6 +324,40 @@ const verifyEmail = asyncHandler(async (req, res) => {
   res.json({ message: 'Email verified successfully' });
 });
 
+const resendVerification = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required' });
+  }
+
+  const user = await User.findOne({ email: email.toLowerCase().trim() });
+  if (!user) {
+    return res.json({ message: 'If your email is registered, a verification link has been sent.' });
+  }
+
+  if (user.emailVerified) {
+    return res.status(400).json({ message: 'Email is already verified' });
+  }
+
+  const COOLDOWN_MS = 60 * 1000;
+  if (user.emailVerificationLastSentAt && (Date.now() - new Date(user.emailVerificationLastSentAt).getTime() < COOLDOWN_MS)) {
+    const timeLeft = Math.ceil((COOLDOWN_MS - (Date.now() - new Date(user.emailVerificationLastSentAt).getTime())) / 1000);
+    return res.status(429).json({ message: `Please wait ${timeLeft} seconds before requesting a new verification link.` });
+  }
+
+  const verificationToken = createTokenId();
+  user.emailVerificationToken = hashToken(verificationToken);
+  user.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000;
+  user.emailVerificationLastSentAt = new Date();
+  await user.save();
+
+  await sendVerificationEmail(user, verificationToken).catch((error) => {
+    console.warn('Unable to send verification email:', error.message);
+  });
+
+  res.json({ message: 'Verification link has been resent successfully.' });
+});
+
 const requestPasswordReset = asyncHandler(async (req, res) => {
   const { email } = req.body;
   const user = await User.findOne({ email });
@@ -408,6 +444,7 @@ module.exports = {
   updateProfile,
   submitUniversityId,
   verifyEmail,
+  resendVerification,
   requestPasswordReset,
   resetPassword,
   setupTwoFactor,

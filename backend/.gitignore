@@ -1,3 +1,29 @@
+# Dependencies
 node_modules/
-uploads/
+
+# Local Environment Variables
 .env
+.env.local
+.env.development
+.env.test
+.env.production
+*.env
+!.env.example
+
+# Local Uploads and cache
+uploads/
+.cache/
+
+# Log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+
+# IDE/OS files
+.DS_Store
+.idea/
+.vscode/

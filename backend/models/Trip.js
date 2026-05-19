@@ -8,6 +8,7 @@ const tripSchema = new mongoose.Schema(
     busNumber: { type: String, required: true, trim: true },
     driver: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     capacity: { type: Number, required: true, min: 1, max: 120 },
+    confirmedCount: { type: Number, default: 0 },
     departureTime: { type: Date, required: true },
     isActive: { type: Boolean, default: true },
   },

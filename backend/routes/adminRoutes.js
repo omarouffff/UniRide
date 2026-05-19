@@ -1,5 +1,6 @@
 const express = require('express');
-const { getUsers, getPendingUsers, updateUserStatus, approveUser, rejectUser, banUser, deleteUser, createTrip, getTrips, getAnalytics } = require('../controllers/adminController');
+const { getUsers, getPendingUsers, updateUserStatus, approveUser, rejectUser, banUser, deleteUser, createTrip, getTrips, getAnalytics, getBookings } = require('../controllers/adminController');
+const { getSettings, updateSettings } = require('../controllers/settingController');
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -15,5 +16,8 @@ router.patch('/users/:userId', updateUserStatus);
 router.get('/trips', getTrips);
 router.post('/trips', createTrip);
 router.get('/analytics', getAnalytics);
+router.get('/bookings', getBookings);
+router.get('/settings', getSettings);
+router.put('/settings', updateSettings);
 
 module.exports = router;

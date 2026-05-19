@@ -1,0 +1,43 @@
+name: UniRide Enterprise CI Pipeline
+
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+    branches: [ main, master, dev ]
+
+jobs:
+  backend-test:
+    name: Backend CI (Node.js & Jest)
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+
+      - name: Install Backend Dependencies
+        run: npm ci
+        working-directory: ./backend
+
+      - name: Run Jest Tests
+        run: npm test
+        working-directory: ./backend
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci-test-jwt-secret-key-super-secure
+          QR_ENCRYPTION_SECRET: ci-test-qr-secret-key-32-chars-long
+          PAYMOB_API_KEY: ci-test-paymob-api-key
+          PAYMOB_HMAC_SECRET: ci-test-paymob-hmac-secret
+          PAYMOB_INTEGRATION_ID: 12345
+          PAYMOB_IFRAME_ID: 67890

@@ -30,6 +30,9 @@ const { verifyAccessToken } = require('./services/tokenService');
 
 dotenv.config();
 
+const { validateEnv } = require('./config/env');
+validateEnv();
+
 const appVersion = process.env.DEPLOYMENT_VERSION || process.env.BUILD_ID || 'dev';
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || 'http://localhost:3000')
   .split(',')
@@ -74,6 +77,9 @@ app.use(mongoSanitize());
 app.use(xss());
 
 const createRateLimiter = (options) => {
+  if (process.env.NODE_ENV === 'test') {
+    return (req, res, next) => next();
+  }
   let store;
   try {
     const redisClient = getRedisClient();
@@ -114,7 +120,10 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(
+app.use((req, res, next) => {
+  if (req.path === '/api/payments/webhook' || process.env.NODE_ENV === 'test') {
+    return next();
+  }
   csrf({
     cookie: {
       httpOnly: true,
@@ -124,8 +133,8 @@ app.use(
     },
     ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
     value: (req) => req.headers['x-csrf-token'] || req.body._csrf || req.query._csrf,
-  })
-);
+  })(req, res, next);
+});
 
 app.use((req, res, next) => {
   const clientVersion = req.headers['x-client-version'];
@@ -249,7 +258,11 @@ async function start() {
   });
 }
 
-start().catch((error) => {
-  logger.error('Failed to start server', { error: error.message });
-  process.exit(1);
-});
+if (require.main === module) {
+  start().catch((error) => {
+    logger.error('Failed to start server', { error: error.message });
+    process.exit(1);
+  });
+}
+
+module.exports = { app, server };

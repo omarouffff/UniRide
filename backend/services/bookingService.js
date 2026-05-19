@@ -13,11 +13,6 @@ async function allocateBooking(details) {
     targetDate.setHours(0, 0, 0, 0);
   }
 
-  const bookingFilter = trip ? { trip: trip._id } : { travelDate: targetDate };
-  const existingConfirmed = await Booking.countDocuments({ ...bookingFilter, status: 'confirmed' });
-  const bookingsOnTrip = await Booking.find(bookingFilter).sort('createdAt');
-  const capacity = trip?.capacity || DEFAULT_SEAT_CAPACITY;
-
   const booking = new Booking({
     user,
     trip: trip?._id,
@@ -27,17 +22,42 @@ async function allocateBooking(details) {
     route: trip ? `${trip.pickupPoint} -> ${trip.destination}` : `${pickupPoint} -> ${destination}`,
   });
 
-  if (existingConfirmed < capacity) {
-    booking.status = 'confirmed';
-    booking.seat = `S-${existingConfirmed + 1}`;
-    booking.waitingPosition = null;
+  if (trip) {
+    // Optimistic atomic locking for Trip bookings to prevent concurrent overbooking
+    const updatedTrip = await Trip.findOneAndUpdate(
+      { _id: trip._id, confirmedCount: { $lt: trip.capacity } },
+      { $inc: { confirmedCount: 1 } },
+      { new: true }
+    );
+
+    if (updatedTrip) {
+      booking.status = 'confirmed';
+      booking.seat = `S-${updatedTrip.confirmedCount}`;
+      booking.waitingPosition = null;
+    } else {
+      booking.status = 'waiting';
+      const waitingCount = await Booking.countDocuments({ trip: trip._id, status: 'waiting' });
+      booking.waitingPosition = waitingCount + 1;
+    }
   } else {
-    booking.status = 'waiting';
-    const waitingCount = bookingsOnTrip.filter((item) => item.status === 'waiting').length;
-    booking.waitingPosition = waitingCount + 1;
+    // Fallback for manual bookings not tied to a specific Trip
+    const bookingFilter = { travelDate: targetDate };
+    const existingConfirmed = await Booking.countDocuments({ ...bookingFilter, status: 'confirmed' });
+    const capacity = DEFAULT_SEAT_CAPACITY;
+
+    if (existingConfirmed < capacity) {
+      booking.status = 'confirmed';
+      booking.seat = `S-${existingConfirmed + 1}`;
+      booking.waitingPosition = null;
+    } else {
+      booking.status = 'waiting';
+      const waitingCount = await Booking.countDocuments({ ...bookingFilter, status: 'waiting' });
+      booking.waitingPosition = waitingCount + 1;
+    }
   }
 
   await booking.save();
+
   if (booking.status === 'confirmed') {
     booking.qrPayload = encryptQrPayload({
       bookingId: booking._id,
@@ -47,6 +67,7 @@ async function allocateBooking(details) {
     });
     await booking.save();
   }
+
   return booking;
 }
 

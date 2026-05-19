@@ -185,4 +185,12 @@ const getAnalytics = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getUsers, getPendingUsers, updateUserStatus, approveUser, rejectUser, banUser, deleteUser, createTrip, getTrips, getAnalytics };
+const getBookings = asyncHandler(async (req, res) => {
+  const bookings = await Booking.find()
+    .populate('user', 'name email universityId')
+    .populate('trip', 'title busNumber pickupPoint destination')
+    .sort({ createdAt: -1 });
+  res.json({ bookings });
+});
+
+module.exports = { getUsers, getPendingUsers, updateUserStatus, approveUser, rejectUser, banUser, deleteUser, createTrip, getTrips, getAnalytics, getBookings };

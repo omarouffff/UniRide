@@ -69,4 +69,28 @@ const scanQr = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getDriverBookings, scanQr };
+const boardPassengerManual = asyncHandler(async (req, res) => {
+  const { bookingId } = req.body;
+  if (!bookingId) {
+    return res.status(400).json({ message: 'Booking ID is required' });
+  }
+
+  const booking = await Booking.findOne({
+    _id: bookingId,
+    status: 'confirmed',
+  }).populate('user', 'name email universityId');
+
+  if (!booking) {
+    return res.status(404).json({ message: 'Confirmed booking not found' });
+  }
+
+  booking.boardedAt = new Date();
+  await booking.save();
+
+  res.json({
+    message: 'Passenger checked in manually successfully',
+    booking,
+  });
+});
+
+module.exports = { getDriverBookings, scanQr, boardPassengerManual };

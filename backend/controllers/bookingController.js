@@ -109,16 +109,45 @@ const cancelBooking = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Cancellation deadline has passed' });
   }
 
+  const wasConfirmed = booking.status === 'confirmed';
+  const cancelledPosition = booking.waitingPosition;
+
   booking.status = 'cancelled';
   booking.cancelledAt = new Date();
+  booking.waitingPosition = null;
   await booking.save();
 
-  const firstWaiting = await Booking.findOne({ trip: booking.trip, status: 'waiting' }).sort({ createdAt: 1 });
-  if (firstWaiting) {
-    firstWaiting.status = 'confirmed';
-    firstWaiting.seat = booking.seat;
-    firstWaiting.waitingPosition = null;
-    await firstWaiting.save();
+  if (wasConfirmed) {
+    const firstWaiting = await Booking.findOne({ trip: booking.trip, status: 'waiting' }).sort({ createdAt: 1 });
+    if (firstWaiting) {
+      firstWaiting.status = 'confirmed';
+      firstWaiting.seat = booking.seat;
+      firstWaiting.waitingPosition = null;
+      
+      const { encryptQrPayload } = require('../utils/qrPayload');
+      firstWaiting.qrPayload = encryptQrPayload({
+        bookingId: firstWaiting._id,
+        userId: firstWaiting.user,
+        tripId: firstWaiting.trip,
+        seat: firstWaiting.seat,
+      });
+      await firstWaiting.save();
+
+      // Shift other waitlisted bookings up
+      await Booking.updateMany(
+        { trip: booking.trip, status: 'waiting' },
+        { $inc: { waitingPosition: -1 } }
+      );
+    } else if (booking.trip) {
+      // Decrement confirmedCount atomically since no waitlist filled the seat
+      await Trip.findByIdAndUpdate(booking.trip, { $inc: { confirmedCount: -1 } });
+    }
+  } else if (cancelledPosition) {
+    // Shift other waitlisted bookings up
+    await Booking.updateMany(
+      { trip: booking.trip, status: 'waiting', waitingPosition: { $gt: cancelledPosition } },
+      { $inc: { waitingPosition: -1 } }
+    );
   }
 
   res.json({ booking });
