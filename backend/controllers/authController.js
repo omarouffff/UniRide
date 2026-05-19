@@ -15,8 +15,8 @@ function setAuthCookie(res, token) {
 }
 
 const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, phoneNumber, password, universityId } = req.body;
-  if (!name || !email || !phoneNumber || !password || !universityId) {
+  const { name, email, phoneNumber, password, universityId, college, academicYear } = req.body;
+  if (!name || !email || !phoneNumber || !password || !universityId || !college || !academicYear) {
     return res.status(400).json({ message: 'All fields are required' });
   }
 
@@ -49,6 +49,8 @@ const registerUser = asyncHandler(async (req, res) => {
     name,
     email,
     phoneNumber,
+    college,
+    academicYear,
     passwordHash: password,
     universityId,
     idCardImage: idCardUpload.secure_url,
@@ -80,6 +82,10 @@ const loginUser = asyncHandler(async (req, res) => {
 
   if (user.status === 'rejected') {
     return res.status(403).json({ message: 'Account rejected by administration', status: 'rejected' });
+  }
+
+  if (!user.isActive) {
+    return res.status(403).json({ message: 'Account is banned. Contact administration.', status: 'banned' });
   }
 
   const token = generateToken(user._id);
@@ -140,4 +146,25 @@ const submitUniversityId = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { registerUser, loginUser, logoutUser, getProfile, submitUniversityId };
+const updateProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id);
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  const { name, phoneNumber, college, academicYear } = req.body;
+  if (name) user.name = name;
+  if (phoneNumber) user.phoneNumber = phoneNumber;
+  if (college) user.college = college;
+  if (academicYear) user.academicYear = academicYear;
+
+  if (req.file) {
+    const uploadResult = await uploadToCloudinary(req.file, 'uniride/profile-images');
+    user.profileImage = uploadResult.secure_url;
+  }
+
+  await user.save();
+  res.json({ user: user.toSafeObject() });
+});
+
+module.exports = { registerUser, loginUser, logoutUser, getProfile, updateProfile, submitUniversityId };

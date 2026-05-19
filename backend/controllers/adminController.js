@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
 const Trip = require('../models/Trip');
 const Booking = require('../models/Booking');
+const Payment = require('../models/Payment');
 
 const getUsers = asyncHandler(async (req, res) => {
   const { status, role } = req.query;
@@ -16,7 +17,7 @@ const getUsers = asyncHandler(async (req, res) => {
   }
 
   const users = await User.find(filter)
-    .select('-password')
+    .select('-passwordHash')
     .sort({ createdAt: -1 });
 
   res.json({ users: users.map((user) => user.toSafeObject()) });
@@ -92,6 +93,35 @@ const rejectUser = asyncHandler(async (req, res) => {
   res.json({ message: 'User rejected successfully', user: user.toSafeObject() });
 });
 
+const banUser = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  user.isActive = false;
+  user.reviewNotes = req.body?.reviewNotes || 'Banned by administration';
+  user.reviewedAt = new Date();
+  await user.save();
+
+  res.json({ message: 'User banned successfully', user: user.toSafeObject() });
+});
+
+const deleteUser = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  await Promise.all([
+    Booking.deleteMany({ user: user._id }),
+    Payment.deleteMany({ user: user._id }),
+    User.deleteOne({ _id: user._id }),
+  ]);
+
+  res.json({ message: 'User and related records deleted successfully' });
+});
+
 const createTrip = asyncHandler(async (req, res) => {
   const { title, pickupPoint, destination, busNumber, capacity, departureTime, driver } = req.body;
   if (!title || !pickupPoint || !destination || !busNumber || !capacity || !departureTime) {
@@ -117,14 +147,29 @@ const getTrips = asyncHandler(async (req, res) => {
 });
 
 const getAnalytics = asyncHandler(async (req, res) => {
-  const [bookingsCount, pendingUsers, noShowStats, tripsCount, confirmedBookings, waitingBookings] = await Promise.all([
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const [bookingsCount, pendingUsers, noShowStats, tripsCount, confirmedBookings, waitingBookings, revenue, expenses] = await Promise.all([
     Booking.countDocuments(),
     User.countDocuments({ status: 'pending' }),
     User.aggregate([{ $group: { _id: null, total: { $sum: '$noShowCount' } } }]),
     Trip.countDocuments({ isActive: true }),
     Booking.countDocuments({ status: 'confirmed' }),
     Booking.countDocuments({ status: 'waiting' }),
+    Payment.aggregate([
+      { $match: { status: 'completed', createdAt: { $gte: startOfMonth } } },
+      { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ]),
+    Payment.aggregate([
+      { $match: { status: 'refunded', createdAt: { $gte: startOfMonth } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
   ]);
+
+  const monthlyRevenue = revenue[0]?.total || 0;
+  const monthlyExpenses = expenses[0]?.total || 0;
 
   res.json({
     bookingsCount,
@@ -133,7 +178,11 @@ const getAnalytics = asyncHandler(async (req, res) => {
     tripsCount,
     confirmedBookings,
     waitingBookings,
+    monthlyRevenue,
+    monthlyExpenses,
+    profit: monthlyRevenue - monthlyExpenses,
+    completedPayments: revenue[0]?.count || 0,
   });
 });
 
-module.exports = { getUsers, getPendingUsers, updateUserStatus, approveUser, rejectUser, createTrip, getTrips, getAnalytics };
+module.exports = { getUsers, getPendingUsers, updateUserStatus, approveUser, rejectUser, banUser, deleteUser, createTrip, getTrips, getAnalytics };

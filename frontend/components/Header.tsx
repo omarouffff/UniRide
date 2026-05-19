@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Menu, X, LogOut, Bell, User, Settings } from "lucide-react"
 import { useAuthStore } from "@/store/useAuthStore"
+import api from "@/lib/api"
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -19,12 +20,12 @@ const navItems = [
   { name: "Bookings", href: "/bookings" },
   { name: "My Trips", href: "/my-bookings" },
   { name: "Profile", href: "/profile" },
-]
+] as const
 
 export function Header() {
   const router = useRouter()
   const pathname = usePathname()
-  const { user, logout } = useAuthStore()
+  const { user, clearAuth } = useAuthStore()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
@@ -36,8 +37,9 @@ export function Header() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await api.post("/auth/logout").catch(() => undefined)
+    clearAuth()
     router.push("/login")
   }
 

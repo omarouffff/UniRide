@@ -17,6 +17,7 @@ const paymentSchema = new mongoose.Schema(
       default: 'pending',
     },
     reference: { type: String, unique: true }, // Transaction ID
+    proofImage: { type: String },
     description: { type: String },
     metadata: mongoose.Schema.Types.Mixed, // For storing provider-specific data
     isActive: { type: Boolean, default: true },

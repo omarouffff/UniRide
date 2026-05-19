@@ -16,6 +16,8 @@ const bookingSchema = new mongoose.Schema(
     },
     waitingPosition: { type: Number, default: null },
     noShow: { type: Boolean, default: false },
+    boardedAt: { type: Date },
+    qrPayload: { type: String },
     route: { type: String, trim: true },
   },
   { timestamps: true }

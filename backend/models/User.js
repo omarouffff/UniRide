@@ -5,7 +5,31 @@ const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 100 },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    phoneNumber: { type: String, required: true, trim: true, match: [/^\+?[0-9]{10,15}$/, 'Invalid phone number format'] },
+    phoneNumber: {
+      type: String,
+      required() {
+        return this.role === 'student';
+      },
+      trim: true,
+      match: [/^\+?[0-9]{10,15}$/, 'Invalid phone number format'],
+    },
+    college: {
+      type: String,
+      required() {
+        return this.role === 'student';
+      },
+      trim: true,
+      maxlength: 120,
+    },
+    academicYear: {
+      type: String,
+      required() {
+        return this.role === 'student';
+      },
+      trim: true,
+      maxlength: 60,
+    },
+    profileImage: { type: String },
     passwordHash: { type: String, required: true, minlength: 8 },
     role: { type: String, enum: ['student', 'admin', 'driver'], default: 'student' },
     status: {
@@ -67,6 +91,9 @@ userSchema.methods.toSafeObject = function () {
     name: this.name,
     email: this.email,
     phoneNumber: this.phoneNumber,
+    college: this.college,
+    academicYear: this.academicYear,
+    profileImage: this.profileImage,
     role: this.role,
     status: this.status,
     universityId: this.universityId,

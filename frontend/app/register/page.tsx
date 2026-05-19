@@ -17,6 +17,8 @@ const schema = z.object({
   name: z.string().min(2, 'Enter your full name'),
   email: z.string().email('Enter a valid email'),
   phoneNumber: z.string().regex(/^\+?[0-9]{10,15}$/, 'Enter a valid phone number'),
+  college: z.string().min(2, 'Enter your college'),
+  academicYear: z.string().min(1, 'Select your academic year'),
   password: z.string().min(8, 'Password must contain at least 8 characters'),
   universityId: z.string().min(8, 'Use your university ID'),
   idCardImage: z.any().refine((files) => files?.length === 1, 'University ID image is required'),
@@ -35,6 +37,8 @@ export default function RegisterPage() {
     formData.append('name', values.name);
     formData.append('email', values.email);
     formData.append('phoneNumber', values.phoneNumber);
+    formData.append('college', values.college);
+    formData.append('academicYear', values.academicYear);
     formData.append('password', values.password);
     formData.append('universityId', values.universityId);
     formData.append('idCardImage', values.idCardImage[0]);
@@ -78,6 +82,16 @@ export default function RegisterPage() {
             <FormLabel htmlFor="password">Password</FormLabel>
             <Input id="password" type="password" placeholder="Minimum 8 characters" {...register('password')} />
             {errors.password && <FormMessage>{errors.password.message}</FormMessage>}
+          </FormField>
+          <FormField>
+            <FormLabel htmlFor="college">College</FormLabel>
+            <Input id="college" placeholder="Engineering" {...register('college')} />
+            {errors.college && <FormMessage>{errors.college.message}</FormMessage>}
+          </FormField>
+          <FormField>
+            <FormLabel htmlFor="academicYear">Academic year</FormLabel>
+            <Input id="academicYear" placeholder="Year 3" {...register('academicYear')} />
+            {errors.academicYear && <FormMessage>{errors.academicYear.message}</FormMessage>}
           </FormField>
           <FormField>
             <FormLabel htmlFor="universityId">University ID</FormLabel>

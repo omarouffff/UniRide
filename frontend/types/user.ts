@@ -6,6 +6,10 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   status: 'pending' | 'approved' | 'rejected';
+  phoneNumber?: string;
+  college?: string;
+  academicYear?: string;
+  profileImage?: string;
   universityId: string;
   universityIdStatus: 'pending' | 'approved' | 'verified' | 'rejected';
   idCardImage?: string;

@@ -15,6 +15,8 @@ services:
         value: 5000
       - key: MONGODB_URI
         sync: false
+      - key: MONGO_URI
+        sync: false
       - key: REDIS_URL
         sync: false
       - key: JWT_SECRET
@@ -44,9 +46,8 @@ services:
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: ALLOWED_ORIGINS
-        value: "https://uniride.vercel.app,https://yourdomain.com"
+        sync: false
       - key: RATE_LIMIT_WINDOW_MS
         value: "900000"
       - key: RATE_LIMIT_MAX_REQUESTS
         value: "100"
-

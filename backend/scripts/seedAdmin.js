@@ -18,6 +18,7 @@ async function seedAdmin() {
   const existingAdmin = await User.findOne({ email: ADMIN_EMAIL });
   if (existingAdmin) {
     existingAdmin.name = 'UniRide Admin';
+    existingAdmin.phoneNumber = existingAdmin.phoneNumber || '+200000000000';
     existingAdmin.role = 'admin';
     existingAdmin.status = 'approved';
     existingAdmin.universityIdStatus = 'approved';
@@ -28,6 +29,7 @@ async function seedAdmin() {
     await User.create({
       name: 'UniRide Admin',
       email: ADMIN_EMAIL,
+      phoneNumber: '+200000000000',
       passwordHash: ADMIN_PASSWORD,
       role: 'admin',
       status: 'approved',

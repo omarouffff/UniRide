@@ -11,7 +11,6 @@ import { useEffect } from "react"
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.5 }
 }
 
 const staggerContainer = {
@@ -197,10 +196,10 @@ export default function LandingPage() {
             className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 text-center"
           >
             {[
-              { label: "Active Users", value: "5,000+" },
-              { label: "Daily Trips", value: "2,500+" },
-              { label: "Drivers", value: "150+" },
-              { label: "Universities", value: "5+" },
+              { label: "Verified access", value: "Admin-approved" },
+              { label: "Seat status", value: "Live" },
+              { label: "Boarding", value: "QR-secured" },
+              { label: "Storage", value: "Cloud-based" },
             ].map((stat, i) => (
               <motion.div
                 key={i}

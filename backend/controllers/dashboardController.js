@@ -1,7 +1,6 @@
 const asyncHandler = require('express-async-handler');
 const QRCode = require('qrcode');
 const Booking = require('../models/Booking');
-const { encryptQrPayload } = require('../utils/qrPayload');
 const DEFAULT_SEAT_CAPACITY = 40;
 
 const getDashboard = asyncHandler(async (req, res) => {
@@ -27,14 +26,7 @@ const getDashboard = asyncHandler(async (req, res) => {
   let qrCode = null;
 
   if (upcomingBooking && upcomingBooking.status === 'confirmed') {
-    qrCode = await QRCode.toDataURL(
-      encryptQrPayload({
-        bookingId: upcomingBooking._id,
-        userId: user._id,
-        tripId: upcomingBooking.trip,
-        seat: upcomingBooking.seat,
-      })
-    );
+    qrCode = await QRCode.toDataURL(upcomingBooking.qrPayload);
   }
 
   res.json({
@@ -59,6 +51,7 @@ const getDashboard = asyncHandler(async (req, res) => {
           seat: upcomingBooking.seat || null,
           waitingPosition: upcomingBooking.waitingPosition || null,
           qrCode,
+          qrPayload: upcomingBooking.qrPayload,
         }
       : null,
     totalSeats: DEFAULT_SEAT_CAPACITY,

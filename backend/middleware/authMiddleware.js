@@ -24,6 +24,9 @@ const protect = asyncHandler(async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ message: 'User not found' });
     }
+    if (!req.user.isActive) {
+      return res.status(403).json({ message: 'Account is banned. Contact administration.', status: 'banned' });
+    }
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Invalid or expired token' });

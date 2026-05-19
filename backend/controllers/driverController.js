@@ -1,14 +1,26 @@
 const asyncHandler = require('express-async-handler');
 const Booking = require('../models/Booking');
+const { decryptQrPayload } = require('../utils/qrPayload');
 
 const getDriverBookings = asyncHandler(async (req, res) => {
-  const bookings = await Booking.find({ status: 'confirmed' })
+  const filter = { status: 'confirmed' };
+  if (req.user.role === 'driver') {
+    filter.$or = [{ boardedAt: { $exists: false } }, { boardedAt: null }];
+  }
+
+  const bookings = await Booking.find(filter)
     .populate('user', 'name email universityId')
+    .populate('trip', 'driver title busNumber departureTime')
     .sort({ travelDate: 1 })
     .lean();
 
-  const mapped = bookings.map((booking) => ({
+  const driverBookings = req.user.role === 'driver'
+    ? bookings.filter((booking) => !booking.trip?.driver || booking.trip.driver.toString() === req.user._id.toString())
+    : bookings;
+
+  const mapped = driverBookings.map((booking) => ({
     id: booking._id,
+    trip: booking.trip,
     route: booking.route,
     pickupPoint: booking.pickupPoint,
     destination: booking.destination,
@@ -25,4 +37,36 @@ const getDriverBookings = asyncHandler(async (req, res) => {
   res.json({ bookings: mapped });
 });
 
-module.exports = { getDriverBookings };
+const scanQr = asyncHandler(async (req, res) => {
+  const { qrPayload } = req.body;
+  if (!qrPayload) {
+    return res.status(400).json({ message: 'QR payload is required' });
+  }
+
+  let payload;
+  try {
+    payload = decryptQrPayload(qrPayload);
+  } catch (error) {
+    return res.status(400).json({ message: 'Invalid QR code' });
+  }
+
+  const booking = await Booking.findOne({
+    _id: payload.bookingId,
+    user: payload.userId,
+    status: 'confirmed',
+  }).populate('user', 'name email universityId');
+
+  if (!booking) {
+    return res.status(404).json({ message: 'Confirmed booking not found' });
+  }
+
+  booking.boardedAt = new Date();
+  await booking.save();
+
+  res.json({
+    message: 'Passenger boarded successfully',
+    booking,
+  });
+});
+
+module.exports = { getDriverBookings, scanQr };

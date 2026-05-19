@@ -1,5 +1,6 @@
 const Booking = require('../models/Booking');
 const Trip = require('../models/Trip');
+const { encryptQrPayload } = require('../utils/qrPayload');
 
 const DEFAULT_SEAT_CAPACITY = 40;
 
@@ -37,6 +38,15 @@ async function allocateBooking(details) {
   }
 
   await booking.save();
+  if (booking.status === 'confirmed') {
+    booking.qrPayload = encryptQrPayload({
+      bookingId: booking._id,
+      userId: booking.user,
+      tripId: booking.trip,
+      seat: booking.seat,
+    });
+    await booking.save();
+  }
   return booking;
 }
 

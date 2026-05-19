@@ -18,7 +18,11 @@ interface AdminUser {
   role: 'student' | 'admin' | 'driver';
   status: 'pending' | 'approved' | 'rejected';
   universityId?: string;
+  college?: string;
+  academicYear?: string;
+  phoneNumber?: string;
   idCardImage?: string;
+  isActive?: boolean;
 }
 
 interface Analytics {
@@ -26,6 +30,10 @@ interface Analytics {
   pendingUsers: number;
   noShowStats: number;
   tripsCount: number;
+  monthlyRevenue: number;
+  monthlyExpenses: number;
+  profit: number;
+  completedPayments: number;
 }
 
 export default function AdminPage() {
@@ -63,6 +71,19 @@ export default function AdminPage() {
     toast({ variant: 'success', title: `User ${status}`, description: 'The account lifecycle was updated.' });
   }
 
+  async function banUser(id: string) {
+    const response = await api.patch(`/admin/users/${id}/ban`);
+    setUsers((current) => current.map((item) => (item.id === id ? response.data.user : item)));
+    toast({ variant: 'success', title: 'User banned', description: 'The account can no longer access the system.' });
+  }
+
+  async function deleteUser(id: string) {
+    if (!window.confirm('Delete this user and related records?')) return;
+    await api.delete(`/admin/users/${id}`);
+    setUsers((current) => current.filter((item) => item.id !== id));
+    toast({ variant: 'success', title: 'User deleted', description: 'The user was removed from the database.' });
+  }
+
   async function createTrip(event: React.FormEvent) {
     event.preventDefault();
     await api.post('/admin/trips', { ...tripForm, capacity: Number(tripForm.capacity) });
@@ -91,6 +112,8 @@ export default function AdminPage() {
             ['Pending users', analytics?.pendingUsers ?? counts.pending],
             ['No-shows', analytics?.noShowStats ?? 0],
             ['Trips', analytics?.tripsCount ?? 0],
+            ['Revenue', `${analytics?.monthlyRevenue ?? 0} EGP`],
+            ['Profit', `${analytics?.profit ?? 0} EGP`],
           ].map(([label, value]) => (
             <Card key={label} className="rounded-lg">
               <BarChart3 className="h-5 w-5 text-cyan-200" />
@@ -120,11 +143,16 @@ export default function AdminPage() {
                       <h3 className="font-semibold text-white">{adminUser.name}</h3>
                       <p className="text-sm text-slate-400">{adminUser.email}</p>
                       <p className="text-sm text-slate-400">University ID: {adminUser.universityId || 'N/A'}</p>
+                      <p className="text-sm text-slate-400">College: {adminUser.college || 'N/A'} - {adminUser.academicYear || 'N/A'}</p>
+                      <p className="text-sm text-slate-400">Phone: {adminUser.phoneNumber || 'N/A'}</p>
                       <p className="mt-1 text-sm capitalize text-cyan-100">{adminUser.status}</p>
+                      {adminUser.isActive === false && <p className="text-sm text-rose-300">Banned</p>}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button size="sm" onClick={() => updateUser(adminUser.id, 'approved')}><Check className="mr-1 h-4 w-4" /> Approve</Button>
                       <Button size="sm" variant="outline" onClick={() => updateUser(adminUser.id, 'rejected')}><X className="mr-1 h-4 w-4" /> Reject</Button>
+                      <Button size="sm" variant="outline" onClick={() => banUser(adminUser.id)}>Ban</Button>
+                      <Button size="sm" variant="outline" onClick={() => deleteUser(adminUser.id)}>Delete</Button>
                     </div>
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
