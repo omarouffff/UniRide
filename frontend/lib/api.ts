@@ -1,5 +1,20 @@
 import axios from 'axios';
+import { getAccessToken, getRefreshToken, saveAuthTokens } from '@/lib/auth';
 import { useAuthStore } from '@/store/useAuthStore';
+
+const AUTH_ROUTES_SKIP_REFRESH = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/password-reset/request',
+  '/auth/password-reset/confirm',
+  '/auth/verify-email',
+];
+
+function shouldSkipAuthRefresh(url?: string) {
+  if (!url) return false;
+  return AUTH_ROUTES_SKIP_REFRESH.some((route) => url.includes(route));
+}
 
 const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 const base = rawBase.endsWith('/api') ? rawBase : `${rawBase.replace(/\/$/, '')}/api`;
@@ -27,9 +42,13 @@ export async function refreshCsrfToken() {
 }
 
 api.interceptors.request.use((config) => {
+  config.headers = config.headers || {};
   if (csrfToken) {
-    config.headers = config.headers || {};
     config.headers['x-csrf-token'] = csrfToken;
+  }
+  const accessToken = getAccessToken();
+  if (accessToken && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
   return config;
 });
@@ -53,7 +72,7 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !shouldSkipAuthRefresh(originalRequest.url)) {
       if (originalRequest.url === '/auth/refresh') {
         return Promise.reject(error);
       }
@@ -74,14 +93,18 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        await api.post('/auth/refresh');
+        const storedRefreshToken = getRefreshToken();
+        const refreshResponse = await api.post('/auth/refresh', storedRefreshToken ? { refreshToken: storedRefreshToken } : undefined);
+        if (refreshResponse.data?.accessToken || refreshResponse.data?.refreshToken) {
+          saveAuthTokens(refreshResponse.data.accessToken, refreshResponse.data.refreshToken);
+        }
         processQueue(null);
         isRefreshing = false;
         return api(originalRequest);
       } catch (err) {
         processQueue(err);
         isRefreshing = false;
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
           useAuthStore.getState().clearAuth();
           window.location.href = '/login';
         }

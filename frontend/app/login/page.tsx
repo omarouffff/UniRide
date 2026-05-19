@@ -7,7 +7,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { LogIn } from 'lucide-react';
 import * as z from 'zod';
-import api from '@/lib/api';
+import api, { refreshCsrfToken } from '@/lib/api';
+import { extractApiErrorMessage, getPostLoginPath, saveAuthTokens } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormField, FormLabel, FormMessage } from '@/components/ui/form';
@@ -21,6 +22,8 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>;
 
+const isDev = process.env.NODE_ENV === 'development';
+
 export default function LoginPage() {
   const router = useRouter();
   const setUser = useAuthStore((state) => state.setUser);
@@ -31,31 +34,48 @@ export default function LoginPage() {
   async function onSubmit(values: Values) {
     setLoading(true);
     try {
-      const response = await api.post('/auth/login', values);
-      setUser(response.data.user);
-      toast({ variant: 'success', title: 'Login successful', description: 'Welcome back to UniRide.' });
-      router.push('/dashboard');
-    } catch (error: any) {
-      const message = error?.response?.data?.message || 'Check your credentials.';
-      const status = error?.response?.status;
-      const dataStatus = error?.response?.data?.status;
+      await refreshCsrfToken();
 
-      let title = 'Login Failed';
-      if (status === 423) {
-        title = 'Account Locked';
-      } else if (status === 403) {
-        if (dataStatus === 'pending') {
-          title = 'Verification Pending';
-        } else if (dataStatus === 'rejected') {
-          title = 'Account Rejected';
-        } else if (dataStatus === 'banned') {
-          title = 'Account Suspended';
-        } else {
-          title = 'Verification Required';
-        }
+      if (isDev) {
+        console.log('[login] request', { email: values.email });
       }
 
-      toast({ variant: 'error', title, description: message });
+      const response = await api.post('/auth/login', values);
+
+      if (isDev) {
+        console.log('[login] response', {
+          user: response.data.user,
+          hasAccessToken: Boolean(response.data.accessToken),
+          hasRefreshToken: Boolean(response.data.refreshToken),
+        });
+      }
+
+      const user = response.data.user;
+      saveAuthTokens(response.data.accessToken, response.data.refreshToken);
+      setUser(user);
+
+      toast({
+        variant: 'success',
+        title: 'Login successful',
+        description: `Welcome back, ${user.name}.`,
+      });
+
+      router.push(getPostLoginPath(user) as '/dashboard');
+    } catch (error: unknown) {
+      const message = extractApiErrorMessage(error);
+      const status = (error as { response?: { status?: number; data?: { status?: string } } })?.response?.status;
+      const dataStatus = (error as { response?: { data?: { status?: string } } })?.response?.data?.status;
+
+      if (isDev) {
+        console.error('[login] error', { status, dataStatus, message, error });
+      }
+
+      toast({
+        variant: 'error',
+        title: status === 423 ? 'Account locked' : 'Login failed',
+        description: message,
+      });
+
       if (dataStatus === 'pending') {
         router.push('/pending-approval');
       }
@@ -74,12 +94,12 @@ export default function LoginPage() {
         <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
           <FormField>
             <FormLabel htmlFor="email">Email</FormLabel>
-            <Input id="email" type="email" placeholder="student@university.edu" {...register('email')} />
+            <Input id="email" type="email" placeholder="student@university.edu" disabled={loading} {...register('email')} />
             {errors.email && <FormMessage>{errors.email.message}</FormMessage>}
           </FormField>
           <FormField>
             <FormLabel htmlFor="password">Password</FormLabel>
-            <Input id="password" type="password" placeholder="Enter your password" {...register('password')} />
+            <Input id="password" type="password" placeholder="Enter your password" disabled={loading} {...register('password')} />
             {errors.password && <FormMessage>{errors.password.message}</FormMessage>}
           </FormField>
           <Button type="submit" className="w-full gap-2" disabled={loading}>

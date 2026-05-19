@@ -20,4 +20,6 @@ export interface UserProfile {
 
 export interface AuthResponse {
   user: UserProfile;
+  accessToken?: string;
+  refreshToken?: string;
 }

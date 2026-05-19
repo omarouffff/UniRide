@@ -110,10 +110,27 @@ const registerUser = asyncHandler(async (req, res) => {
 
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password, twoFactorCode, deviceName } = req.body;
-  const user = await User.findOne({ email });
+  const normalizedEmail = String(email || '').toLowerCase().trim();
+  const isDebug = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test';
+
+  if (isDebug) {
+    console.log('[auth.login] request', { email: normalizedEmail, hasPassword: Boolean(password) });
+  }
+
+  const user = await User.findOne({ email: normalizedEmail });
+
+  if (isDebug) {
+    console.log('[auth.login] user lookup', {
+      found: Boolean(user),
+      emailVerified: user?.emailVerified,
+      status: user?.status,
+      role: user?.role,
+      isActive: user?.isActive,
+    });
+  }
 
   if (!user) {
-    auditEvent('auth.failed', null, { email, ip: req.ip, reason: 'user-not-found' });
+    auditEvent('auth.failed', null, { email: normalizedEmail, ip: req.ip, reason: 'user-not-found' });
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
@@ -122,7 +139,7 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 
   const isDev = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test';
-  
+
   if (isDev) {
     let modified = false;
     if (!user.emailVerified) {
@@ -139,25 +156,30 @@ const loginUser = asyncHandler(async (req, res) => {
     }
   } else {
     if (!user.emailVerified) {
-      return res.status(403).json({ message: 'Please verify your email before signing in.' });
+      return res.status(403).json({ message: 'Please verify your email', status: 'email_unverified' });
     }
 
     if (!user.status || user.status === 'pending') {
-      return res.status(403).json({ message: 'Account waiting for admin approval', status: 'pending' });
+      return res.status(403).json({ message: 'Your account is waiting for admin approval', status: 'pending' });
     }
   }
 
   if (user.status === 'rejected') {
-    return res.status(403).json({ message: 'Account rejected by administration', status: 'rejected' });
+    return res.status(403).json({ message: 'Your account has been rejected', status: 'rejected' });
   }
 
   if (!user.isActive) {
-    return res.status(403).json({ message: 'Account is banned. Contact administration.', status: 'banned' });
+    return res.status(403).json({ message: 'Your account has been banned', status: 'banned' });
   }
 
-  if (!(await user.comparePassword(password))) {
+  const passwordValid = await user.comparePassword(password);
+  if (isDebug) {
+    console.log('[auth.login] password comparison', { valid: passwordValid });
+  }
+
+  if (!passwordValid) {
     await user.incrementLoginAttempts();
-    auditEvent('auth.failed', user._id, { email, ip: req.ip, reason: 'invalid-password' });
+    auditEvent('auth.failed', user._id, { email: normalizedEmail, ip: req.ip, reason: 'invalid-password' });
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
@@ -201,11 +223,19 @@ const loginUser = asyncHandler(async (req, res) => {
   setTokenCookies(res, accessToken, refreshToken);
   auditEvent('auth.success', user._id, { ip: req.ip, deviceName });
 
-  res.json({ user: user.toSafeObject() });
+  if (isDebug) {
+    console.log('[auth.login] success', { userId: user._id.toString(), role: user.role, status: user.status });
+  }
+
+  res.json({
+    user: user.toSafeObject(),
+    accessToken,
+    refreshToken,
+  });
 });
 
 const refreshToken = asyncHandler(async (req, res) => {
-  const token = req.cookies.refreshToken;
+  const token = req.cookies.refreshToken || req.body?.refreshToken;
   if (!token) {
     return res.status(401).json({ message: 'Refresh token missing' });
   }
@@ -246,7 +276,11 @@ const refreshToken = asyncHandler(async (req, res) => {
     await user.save();
 
     setTokenCookies(res, newAccessToken, newRefreshToken);
-    res.json({ user: user.toSafeObject() });
+    res.json({
+      user: user.toSafeObject(),
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
   } catch (error) {
     auditEvent('auth.refresh-failed', null, { ip: req.ip, error: error.message });
     return res.status(401).json({ message: 'Unable to refresh session' });

@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { clearAuthTokens } from '@/lib/auth';
 import { UserProfile } from '@/types/user';
 
 interface AuthState {
@@ -20,5 +21,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
   setUser: (user) => set({ user }),
   setLoading: (loading) => set({ loading }),
   setHydrated: (hydrated) => set({ hydrated }),
-  clearAuth: () => set({ user: null }),
+  clearAuth: () => {
+    clearAuthTokens();
+    set({ user: null });
+  },
 }));
