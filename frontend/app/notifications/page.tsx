@@ -112,12 +112,13 @@ export default function NotificationsPage() {
 
     socket.on('bookingUpdate', (data: { status?: string; seat?: string }) => {
       // Build visual notification card
+      const statusText = data.status ? data.status.toUpperCase() : 'UNKNOWN';
       const newNotification: NotificationItem = {
         id: `noti-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         title: data.status === 'confirmed' ? 'Seat Booking Confirmed!' : 'Booking Status Shift',
-        message: data.status === 'confirmed' 
+        message: data.status === 'confirmed'
           ? `Your seat request was approved! Assigned Seat: ${data.seat || 'Automatic'}. Direct check-in QR code is ready.`
-          : `Your booking was updated. Current Status: ${data.status.toUpperCase()}.`,
+          : `Your booking was updated. Current Status: ${statusText}.`,
         timestamp: new Date().toISOString(),
         read: false,
         type: data.status === 'confirmed' ? 'success' : 'info',
