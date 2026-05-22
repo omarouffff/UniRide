@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Upload, UserPlus } from 'lucide-react';
 import * as z from 'zod';
@@ -27,6 +28,7 @@ const schema = z.object({
 type Values = z.infer<typeof schema>;
 
 export default function RegisterPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -46,10 +48,10 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await api.post('/auth/register', formData);
-      toast({ variant: 'success', title: 'Registration submitted', description: 'Your account is pending admin approval.' });
+      toast({ variant: 'success', title: t('auth.register'), description: t('errors.verificationSubmitted') });
       router.push('/pending-approval');
     } catch (error: any) {
-      toast({ variant: 'error', title: 'Registration failed', description: error?.response?.data?.message || 'Please review your data.' });
+      toast({ variant: 'error', title: t('errors.registrationFailed'), description: error?.response?.data?.message || t('errors.tryAgainLater') });
     } finally {
       setLoading(false);
     }
@@ -59,57 +61,57 @@ export default function RegisterPage() {
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-white">
       <section className="w-full max-w-2xl rounded-lg border border-white/10 bg-white/[0.05] p-7 shadow-2xl shadow-slate-950/40">
         <div className="mb-6">
-          <p className="text-sm font-medium text-cyan-200">Student registration</p>
-          <h1 className="mt-2 text-3xl font-semibold">Create your UniRide account</h1>
+          <p className="text-sm font-medium text-cyan-200">{t('auth.registrationTitle')}</p>
+          <h1 className="mt-2 text-3xl font-semibold">{t('auth.registrationHeader')}</h1>
         </div>
         <form className="grid gap-5 sm:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
           <FormField>
-            <FormLabel htmlFor="name">Full name</FormLabel>
-            <Input id="name" placeholder="Jane Doe" {...register('name')} />
+            <FormLabel htmlFor="name">{t('auth.fullName')}</FormLabel>
+            <Input id="name" placeholder={t('auth.fullName')} {...register('name')} />
             {errors.name && <FormMessage>{errors.name.message}</FormMessage>}
           </FormField>
           <FormField>
-            <FormLabel htmlFor="email">University email</FormLabel>
-            <Input id="email" type="email" placeholder="student@university.edu" {...register('email')} />
+            <FormLabel htmlFor="email">{t('auth.universityEmail')}</FormLabel>
+            <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} {...register('email')} />
             {errors.email && <FormMessage>{errors.email.message}</FormMessage>}
           </FormField>
           <FormField>
-            <FormLabel htmlFor="phoneNumber">Phone number</FormLabel>
+            <FormLabel htmlFor="phoneNumber">{t('auth.phoneNumber')}</FormLabel>
             <Input id="phoneNumber" type="tel" placeholder="+20 123 4567890" {...register('phoneNumber')} />
             {errors.phoneNumber && <FormMessage>{errors.phoneNumber.message}</FormMessage>}
           </FormField>
           <FormField>
-            <FormLabel htmlFor="password">Password</FormLabel>
-            <Input id="password" type="password" placeholder="Minimum 8 characters" {...register('password')} />
+            <FormLabel htmlFor="password">{t('auth.password')}</FormLabel>
+            <Input id="password" type="password" placeholder={t('auth.passwordPlaceholder')} {...register('password')} />
             {errors.password && <FormMessage>{errors.password.message}</FormMessage>}
           </FormField>
           <FormField>
-            <FormLabel htmlFor="college">College</FormLabel>
-            <Input id="college" placeholder="Engineering" {...register('college')} />
+            <FormLabel htmlFor="college">{t('auth.college')}</FormLabel>
+            <Input id="college" placeholder={t('auth.college')} {...register('college')} />
             {errors.college && <FormMessage>{errors.college.message}</FormMessage>}
           </FormField>
           <FormField>
-            <FormLabel htmlFor="academicYear">Academic year</FormLabel>
-            <Input id="academicYear" placeholder="Year 3" {...register('academicYear')} />
+            <FormLabel htmlFor="academicYear">{t('auth.academicYear')}</FormLabel>
+            <Input id="academicYear" placeholder={t('auth.academicYear')} {...register('academicYear')} />
             {errors.academicYear && <FormMessage>{errors.academicYear.message}</FormMessage>}
           </FormField>
           <FormField>
-            <FormLabel htmlFor="universityId">University ID</FormLabel>
-            <Input id="universityId" placeholder="2026001234" {...register('universityId')} />
+            <FormLabel htmlFor="universityId">{t('auth.universityId')}</FormLabel>
+            <Input id="universityId" placeholder={t('auth.universityId')} {...register('universityId')} />
             {errors.universityId && <FormMessage>{errors.universityId.message}</FormMessage>}
           </FormField>
           <FormField className="sm:col-span-2">
-            <FormLabel htmlFor="idCardImage" className="flex items-center gap-2"><Upload className="h-4 w-4" /> University ID image</FormLabel>
+            <FormLabel htmlFor="idCardImage" className="flex items-center gap-2"><Upload className="h-4 w-4" /> {t('auth.idCardImage')}</FormLabel>
             <Input id="idCardImage" type="file" accept="image/png,image/jpeg" {...register('idCardImage')} />
             {errors.idCardImage && <FormMessage>{String(errors.idCardImage.message)}</FormMessage>}
           </FormField>
           <Button type="submit" className="gap-2 sm:col-span-2" disabled={loading}>
             <UserPlus className="h-4 w-4" />
-            {loading ? 'Submitting...' : 'Register'}
+            {loading ? t('auth.submitting') : t('auth.register')}
           </Button>
         </form>
         <p className="mt-6 text-center text-sm text-slate-400">
-          Already registered? <Link href="/login" className="font-semibold text-cyan-200 hover:text-cyan-100">Login</Link>
+          {t('auth.alreadyRegistered')} <Link href="/login" className="font-semibold text-cyan-200 hover:text-cyan-100">{t('auth.login')}</Link>
         </p>
       </section>
     </main>

@@ -5,8 +5,10 @@ import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Menu, X, LogOut, Bell, User, Settings } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { useAuthStore } from "@/store/useAuthStore"
 import api from "@/lib/api"
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -16,16 +18,17 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 const navItems = [
-  { name: "Dashboard", href: "/dashboard" },
-  { name: "Bookings", href: "/bookings" },
-  { name: "My Trips", href: "/my-bookings" },
-  { name: "Profile", href: "/profile" },
+  { key: 'dashboard', href: '/dashboard' },
+  { key: 'bookings', href: '/bookings' },
+  { key: 'myTrips', href: '/my-bookings' },
+  { key: 'profile', href: '/profile' },
 ] as const
 
 export function Header() {
   const router = useRouter()
   const pathname = usePathname()
   const { user, clearAuth } = useAuthStore()
+  const { t } = useTranslation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
@@ -80,7 +83,7 @@ export function Header() {
                       : "text-slate-300 hover:text-white hover:bg-white/5"
                   }`}
                 >
-                  {item.name}
+                  {t(`nav.${item.key}` as never)}
                 </Link>
               )
             })}
@@ -88,6 +91,7 @@ export function Header() {
 
           {/* Right side items */}
           <div className="flex items-center space-x-4">
+            <LanguageSwitcher />
             <button className="relative p-2 text-slate-400 hover:text-white transition-colors">
               <Bell className="w-5 h-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
@@ -107,16 +111,16 @@ export function Header() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem>
                   <User className="w-4 h-4 mr-2" />
-                  <span>Profile</span>
+                  <span>{t('nav.profile')}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Settings className="w-4 h-4 mr-2" />
-                  <span>Settings</span>
+                  <span>{t('nav.settings')}</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-red-400">
                   <LogOut className="w-4 h-4 mr-2" />
-                  <span>Logout</span>
+                  <span>{t('nav.logout')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -158,7 +162,7 @@ export function Header() {
                       }`}
                       onClick={() => setMobileOpen(false)}
                     >
-                      {item.name}
+                      {t(`nav.${item.key}` as never)}
                     </Link>
                   )
                 })}

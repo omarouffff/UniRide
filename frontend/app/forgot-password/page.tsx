@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import api, { refreshCsrfToken } from '@/lib/api';
@@ -19,6 +20,7 @@ const schema = z.object({
 type Values = z.infer<typeof schema>;
 
 export default function ForgotPasswordPage() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -32,13 +34,13 @@ export default function ForgotPasswordPage() {
       setSent(true);
       toast({
         variant: 'success',
-        title: 'Check your email',
-        description: 'If an account exists, a reset link has been sent.',
+        title: t('auth.checkEmail'),
+        description: t('auth.forgotPasswordSent'),
       });
     } catch (error) {
       toast({
         variant: 'error',
-        title: 'Request failed',
+        title: t('auth.requestFailed'),
         description: extractApiErrorMessage(error),
       });
     } finally {
@@ -49,26 +51,24 @@ export default function ForgotPasswordPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-white">
       <section className="w-full max-w-md rounded-lg border border-white/10 bg-white/5 p-7">
-        <h1 className="text-2xl font-semibold">Forgot password</h1>
+        <h1 className="text-2xl font-semibold">{t('auth.forgotPasswordTitle')}</h1>
         <p className="mt-2 text-sm text-slate-400">
-          {sent
-            ? 'Check your inbox for a password reset link.'
-            : 'Enter your email and we will send you a reset link.'}
+          {sent ? t('auth.forgotPasswordSent') : t('auth.forgotPasswordText')}
         </p>
         {!sent && (
           <form className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <FormField>
-              <FormLabel htmlFor="email">Email</FormLabel>
-              <Input id="email" type="email" placeholder="student@university.edu" disabled={loading} {...register('email')} />
+              <FormLabel htmlFor="email">{t('auth.email')}</FormLabel>
+              <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} disabled={loading} {...register('email')} />
               {errors.email && <FormMessage>{errors.email.message}</FormMessage>}
             </FormField>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Sending...' : 'Send reset link'}
+              {loading ? t('auth.sending') : t('auth.sendResetLink')}
             </Button>
           </form>
         )}
         <Link href="/login" className="mt-4 block text-center text-sm text-cyan-200 hover:text-cyan-100">
-          Back to login
+          {t('auth.backToLogin')}
         </Link>
       </section>
     </main>

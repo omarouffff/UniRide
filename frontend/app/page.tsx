@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { FormEvent, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { buttonVariants } from '@/components/ui/button'
+import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useRouter } from 'next/navigation'
 
@@ -18,6 +20,7 @@ const AVAILABLE_RIDES = [
 ]
 
 export default function LandingPage() {
+  const { t } = useTranslation()
   const router = useRouter()
   const user = useAuthStore((state) => state.user)
   const [pickup, setPickup] = useState(PICKUP_OPTIONS[0])
@@ -49,11 +52,12 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="hidden items-center gap-4 sm:flex">
+            <LanguageSwitcher />
             <Link href="/login" className="text-sm text-slate-300 transition hover:text-cyan-300">
-              Login
+              {t('auth.login')}
             </Link>
             <Link href="/register" className={buttonVariants({ size: 'sm' })}>
-              Sign Up
+              {t('auth.register')}
             </Link>
           </div>
         </div>
@@ -67,12 +71,12 @@ export default function LandingPage() {
             transition={{ duration: 0.5 }}
             className="text-center"
           >
-            <p className="text-sm uppercase tracking-[0.3em] text-cyan-300">Book a Ride</p>
+            <p className="text-sm uppercase tracking-[0.3em] text-cyan-300">{t('home.availableRides')}</p>
             <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-              Book Your Ride to University
+              {t('home.headline')}
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-400 sm:text-lg">
-              Choose your pickup, destination, and time in seconds. Fast booking for campus riders with a clean, modern flow.
+              {t('home.subtext')}
             </p>
           </motion.div>
 
@@ -86,7 +90,7 @@ export default function LandingPage() {
             >
               <div className="space-y-5">
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-300">Pickup location</label>
+                  <label className="block text-sm font-medium text-slate-300">{t('home.pickup')}</label>
                   <select
                     value={pickup}
                     onChange={(event) => setPickup(event.target.value)}
@@ -101,7 +105,7 @@ export default function LandingPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-300">Destination</label>
+                  <label className="block text-sm font-medium text-slate-300">{t('home.destination')}</label>
                   <select
                     value={destination}
                     onChange={(event) => setDestination(event.target.value)}
@@ -116,7 +120,7 @@ export default function LandingPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-300">Time</label>
+                  <label className="block text-sm font-medium text-slate-300">{t('home.time')}</label>
                   <select
                     value={time}
                     onChange={(event) => setTime(event.target.value)}
@@ -135,7 +139,7 @@ export default function LandingPage() {
                   className={`${buttonVariants({ size: 'lg' })} w-full justify-center py-4 text-base font-semibold`}
                 >
                   <ArrowRight className="mr-2 h-4 w-4" />
-                  Book Seat
+                  {t('home.bookSeat')}
                 </button>
               </div>
             </motion.form>
