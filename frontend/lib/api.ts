@@ -65,6 +65,17 @@ api.interceptors.request.use((config) => {
 let isRefreshing = false;
 let failedQueue: Array<{ resolve: () => void; reject: (err: unknown) => void }> = [];
 
+const shouldRetryRequest = (error: any) => {
+  if (!error || !error.config) return false;
+  const retryableCodes = ['ECONNABORTED', 'ERR_NETWORK', 'ECONNRESET', 'ETIMEDOUT'];
+  const status = error.response?.status;
+  return (
+    retryableCodes.includes(error.code) ||
+    (!error.response && error.request) ||
+    (status >= 500 && status < 600)
+  );
+};
+
 const processQueue = (error: unknown) => {
   failedQueue.forEach((prom) => {
     if (error) prom.reject(error);
@@ -84,6 +95,12 @@ api.interceptors.response.use(
         url: originalRequest?.url,
         message: error.message,
       });
+    }
+
+    if (shouldRetryRequest(error) && originalRequest && originalRequest._retryCount < 2) {
+      originalRequest._retryCount = (originalRequest._retryCount || 0) + 1;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * originalRequest._retryCount));
+      return api(originalRequest);
     }
 
     if (error.response?.status === 401 && !originalRequest._retry && !shouldSkipAuthRefresh(originalRequest.url)) {

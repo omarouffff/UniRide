@@ -40,6 +40,9 @@
       ],
       "@/utils/*": [
         "utils/*"
+      ],
+      "@/messages/*": [
+        "messages/*"
       ]
     },
     "plugins": [

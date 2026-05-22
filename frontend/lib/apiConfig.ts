@@ -11,6 +11,13 @@ export function getApiBaseUrl(): string {
   }
 
   if (process.env.NODE_ENV === 'production') {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      console.error(
+        '[UniRide] Missing NEXT_PUBLIC_API_URL. Falling back to same origin /api. Set NEXT_PUBLIC_API_URL in Vercel to your backend URL, e.g. https://your-app.onrender.com/api'
+      );
+      return `${window.location.origin.replace(/\/$/, '')}/api`;
+    }
+
     console.error(
       '[UniRide] Missing NEXT_PUBLIC_API_URL. Set it in Vercel to your backend URL, e.g. https://your-app.onrender.com/api'
     );

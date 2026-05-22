@@ -36,6 +36,15 @@ validateEnv();
 
 const appVersion = process.env.DEPLOYMENT_VERSION || process.env.BUILD_ID || 'dev';
 
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled Promise Rejection', { reason });
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception', { error });
+  process.exit(1);
+});
+
 function buildAllowedOrigins() {
   const fromEnv = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || 'http://localhost:3000')
     .split(',')
@@ -111,6 +120,7 @@ app.use(expressWinston.logger({
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
@@ -194,21 +204,21 @@ app.use((req, res, next) => {
 });
 
 app.get('/api/health', (req, res) => {
+  const dbState = mongoose.connection.readyState;
   const cloudinaryConfig = cloudinary.config();
   const cloudinaryValues = [cloudinaryConfig.cloud_name, cloudinaryConfig.api_key, cloudinaryConfig.api_secret];
   const hasCloudinaryPlaceholder = cloudinaryValues.some((value) => typeof value === 'string' && value?.startsWith('your-'));
-  const dbReady = mongoose.connection.readyState === 1;
 
-  res.status(dbReady ? 200 : 503).json({
-    success: dbReady,
-    message: dbReady ? 'Server is running' : 'Server is up but database is not connected',
-    status: dbReady ? 'ok' : 'degraded',
+  res.status(200).json({
+    success: true,
+    status: 'running',
     version: appVersion,
     environment: process.env.NODE_ENV || 'development',
     database: {
-      state: mongoose.connection.readyState,
-      name: mongoose.connection.name,
-      host: mongoose.connection.host,
+      state: dbState,
+      connected: dbState === 1,
+      name: mongoose.connection.name || null,
+      host: mongoose.connection.host || null,
     },
     cloudinary: {
       configured: Boolean(cloudinaryConfig.cloud_name && cloudinaryConfig.api_key && cloudinaryConfig.api_secret && !hasCloudinaryPlaceholder),
