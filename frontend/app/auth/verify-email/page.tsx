@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import api from '@/lib/api';
+import { resendSignupVerification, verifyEmailOtp } from '@/lib/supabaseAuth';
+import { extractApiErrorMessage } from '@/lib/auth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +20,8 @@ import {
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get('token');
+  const token = searchParams.get('token_hash') || searchParams.get('token');
+  const otpType = (searchParams.get('type') as 'signup' | 'email' | 'recovery' | null) || 'signup';
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(false);
@@ -40,20 +42,24 @@ function VerifyEmailContent() {
         setLoading(true);
         setStatus('verifying');
         try {
-          await api.post('/auth/verify-email', { token });
+          const verifyType =
+            otpType === 'recovery' ? 'recovery' : otpType === 'signup' ? 'signup' : 'email';
+          const { error } = await verifyEmailOtp(token, verifyType);
+          if (error) throw error;
           setStatus('success');
           toast({
             variant: 'success',
             title: 'Email Verified',
             description: 'Your email has been successfully verified! You can now log in.',
           });
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const message = extractApiErrorMessage(err, 'Invalid or expired verification link.');
           setStatus('error');
-          setErrorMessage(err?.response?.data?.message || 'Invalid or expired verification link.');
+          setErrorMessage(message);
           toast({
             variant: 'error',
             title: 'Verification Failed',
-            description: err?.response?.data?.message || 'Invalid or expired verification link.',
+            description: message,
           });
         } finally {
           setLoading(false);
@@ -84,23 +90,22 @@ function VerifyEmailContent() {
 
     setResendLoading(true);
     try {
-      const response = await api.post('/auth/resend-verification', { email });
+      const { error } = await resendSignupVerification(email);
+      if (error) throw error;
       toast({
         variant: 'success',
         title: 'Link Sent',
-        description: response.data.message || 'Verification link has been sent to your email.',
+        description: 'Verification link has been sent to your email.',
       });
-      setCooldown(60); // Start 60-second cooldown
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Unable to send link.';
+      setCooldown(60);
+    } catch (err: unknown) {
+      const msg = extractApiErrorMessage(err, 'Unable to send link.');
       toast({
         variant: 'error',
         title: 'Error',
         description: msg,
       });
-      if (err?.response?.status === 429) {
-        setCooldown(60); // Trigger cooldown if backend reports too many requests
-      }
+      setCooldown(60);
     } finally {
       setResendLoading(false);
     }

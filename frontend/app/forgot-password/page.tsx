@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import api, { refreshCsrfToken } from '@/lib/api';
+import { requestPasswordReset } from '@/lib/supabaseAuth';
 import { extractApiErrorMessage } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,8 +29,8 @@ export default function ForgotPasswordPage() {
   async function onSubmit(values: Values) {
     setLoading(true);
     try {
-      await refreshCsrfToken();
-      await api.post('/auth/password-reset/request', values);
+      const { error } = await requestPasswordReset(values.email);
+      if (error) throw error;
       setSent(true);
       toast({
         variant: 'success',

@@ -38,14 +38,14 @@ interface Booking {
 }
 
 interface Payment {
-  _id: string;
-  id?: string;
+  id: string;
+  _id?: string;
   user: User | null;
   booking: Booking | null;
   amount: number;
   currency: string;
   method: 'card' | 'cash' | 'paymob';
-  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  status: 'pending' | 'under_review' | 'completed' | 'failed' | 'refunded';
   reference: string;
   proofImage?: string;
   createdAt: string;
@@ -74,7 +74,7 @@ export default function AdminFinancialPage() {
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'under_review' | 'completed' | 'failed'>('all');
   const [methodFilter, setMethodFilter] = useState<'all' | 'card' | 'cash'>('all');
 
   // Preview cash proof image state
@@ -95,7 +95,7 @@ export default function AdminFinancialPage() {
       setLoading(true);
       try {
         const [payRes, analyticRes] = await Promise.all([
-          api.get('/payments'),
+          api.get('/admin/payments'),
           api.get('/admin/analytics')
         ]);
         setPayments(payRes.data.payments || []);
@@ -118,10 +118,13 @@ export default function AdminFinancialPage() {
   // Handle cash proof verification
   const handleVerifyPayment = async (paymentId: string, status: 'completed' | 'failed') => {
     try {
-      const res = await api.patch(`/payments/${paymentId}/verify`, { status });
-      
-      setPayments((current) => 
-        current.map((p) => (p._id === paymentId ? { ...p, status: res.data.payment.status } : p))
+      const res = await api.patch(`/admin/payments/${paymentId}/verify`, { status });
+
+      setPayments((current) =>
+        current.map((p) => {
+          const pid = p.id || p._id;
+          return pid === paymentId ? { ...p, status: res.data.payment.status } : p;
+        })
       );
 
       // Refresh analytics to update profit/revenue balances
@@ -438,6 +441,7 @@ export default function AdminFinancialPage() {
                 >
                   <option value="all">All Statuses</option>
                   <option value="pending">Pending Audit</option>
+                  <option value="under_review">Under Review</option>
                   <option value="completed">Completed</option>
                   <option value="failed">Failed / Denied</option>
                 </select>
@@ -479,14 +483,15 @@ export default function AdminFinancialPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/50 text-xs">
                   {filteredPayments.map((p) => {
+                    const paymentId = p.id || p._id || '';
                     const studentName = p.user?.name || 'Unknown User';
                     const studentEmail = p.user?.email || 'N/A';
-                    const isPending = p.status === 'pending';
+                    const isPending = p.status === 'pending' || p.status === 'under_review';
                     const isCompleted = p.status === 'completed';
                     const isFailed = p.status === 'failed';
 
                     return (
-                      <tr key={p._id} className="hover:bg-slate-900/10 transition-colors">
+                      <tr key={paymentId} className="hover:bg-slate-900/10 transition-colors">
                         {/* Passenger */}
                         <td className="py-4 pl-2 font-medium">
                           <div className="font-bold text-slate-200">{studentName}</div>
@@ -561,7 +566,7 @@ export default function AdminFinancialPage() {
                               <>
                                 <Button
                                   size="sm"
-                                  onClick={() => handleVerifyPayment(p._id, 'completed')}
+                                  onClick={() => handleVerifyPayment(paymentId, 'completed')}
                                   className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 rounded-lg"
                                   title="Approve Cash Transaction"
                                 >
@@ -570,7 +575,7 @@ export default function AdminFinancialPage() {
                                 <Button
                                   size="sm"
                                   variant="destructive"
-                                  onClick={() => handleVerifyPayment(p._id, 'failed')}
+                                  onClick={() => handleVerifyPayment(paymentId, 'failed')}
                                   className="px-2.5 rounded-lg"
                                   title="Reject Cash Transaction"
                                 >

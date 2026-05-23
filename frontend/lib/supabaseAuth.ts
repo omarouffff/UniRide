@@ -114,6 +114,43 @@ export const getBrowserSupabaseSession = async () => {
   return supabase.auth.getSession();
 };
 
+export function getAuthRedirectBaseUrl() {
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return process.env.NEXT_PUBLIC_FRONTEND_URL || '';
+}
+
+export const requestPasswordReset = async (email: string) => {
+  const supabase = createSupabaseBrowser();
+  const redirectTo = `${getAuthRedirectBaseUrl()}/auth/reset-password`;
+  return supabase.auth.resetPasswordForEmail(email, { redirectTo });
+};
+
+export const updatePassword = async (password: string) => {
+  const supabase = createSupabaseBrowser();
+  return supabase.auth.updateUser({ password });
+};
+
+export const resendSignupVerification = async (email: string) => {
+  const supabase = createSupabaseBrowser();
+  return supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: {
+      emailRedirectTo: `${getAuthRedirectBaseUrl()}/auth/verify-email`,
+    },
+  });
+};
+
+export const verifyEmailOtp = async (tokenHash: string, type: 'signup' | 'email' | 'recovery' = 'signup') => {
+  const supabase = createSupabaseBrowser();
+  return supabase.auth.verifyOtp({
+    token_hash: tokenHash,
+    type,
+  });
+};
+
 export const getServerSupabaseSession = async (cookieStore: Parameters<typeof createServerClient>[2]['cookies']) => {
   const supabase = createServerClient(supabaseUrl!, supabaseKey!, { cookies: cookieStore });
   return supabase.auth.getSession();

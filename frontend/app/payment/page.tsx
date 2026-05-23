@@ -50,7 +50,7 @@ export default function PaymentPage() {
       try {
         const [payRes, bookRes] = await Promise.all([
           api.get('/payments/mine'),
-          api.get('/bookings/mine')
+          api.get('/bookings')
         ]);
         setPayments(payRes.data.payments || []);
         

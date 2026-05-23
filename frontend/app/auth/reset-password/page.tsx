@@ -1,13 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import api, { refreshCsrfToken } from '@/lib/api';
+import { createBrowserClient } from '@supabase/ssr';
+import { getSupabasePublicConfig } from '@/lib/supabaseEnv';
+import { updatePassword } from '@/lib/supabaseAuth';
 import { extractApiErrorMessage } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,12 +34,12 @@ type Values = z.infer<typeof schema>;
 
 function ResetPasswordForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get('token');
   const { t } = useTranslation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   const {
     register,
@@ -45,19 +47,44 @@ function ResetPasswordForm() {
     formState: { errors },
   } = useForm<Values>({ resolver: zodResolver(schema) });
 
+  useEffect(() => {
+    const { url, key } = getSupabasePublicConfig();
+    if (!url || !key) {
+      setSessionError('Supabase is not configured.');
+      return;
+    }
+    const supabase = createBrowserClient(url, key);
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setReady(true);
+        setSessionError(null);
+      }
+    });
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        setReady(true);
+      }
+    });
+
+    return () => subscription.subscription.unsubscribe();
+  }, []);
+
   async function onSubmit(values: Values) {
-    if (!token) {
-      toast({ variant: 'error', title: t('auth.invalidResetLink'), description: t('auth.resetLinkMissing') });
+    if (!ready) {
+      toast({
+        variant: 'error',
+        title: t('auth.invalidResetLink'),
+        description: t('auth.resetLinkMissing'),
+      });
       return;
     }
 
     setLoading(true);
     try {
-      await refreshCsrfToken();
-      await api.post('/auth/password-reset/confirm', {
-        token,
-        password: values.password,
-      });
+      const { error } = await updatePassword(values.password);
+      if (error) throw error;
       setSuccess(true);
       toast({ variant: 'success', title: t('auth.passwordUpdated'), description: t('auth.passwordUpdatedDescription') });
       setTimeout(() => router.push('/login'), 2000);
@@ -72,12 +99,12 @@ function ResetPasswordForm() {
     }
   }
 
-  if (!token) {
+  if (sessionError) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-white">
         <section className="w-full max-w-md rounded-lg border border-white/10 bg-white/5 p-7 text-center">
           <h1 className="text-xl font-semibold">{t('auth.invalidResetLink')}</h1>
-          <p className="mt-2 text-sm text-slate-400">{t('auth.resetLinkMissing')}</p>
+          <p className="mt-2 text-sm text-slate-400">{sessionError}</p>
           <Link href="/forgot-password" className="mt-4 inline-block text-cyan-200 hover:text-cyan-100">
             {t('auth.requestReset')}
           </Link>
@@ -101,19 +128,21 @@ function ResetPasswordForm() {
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-white">
       <section className="w-full max-w-md rounded-lg border border-white/10 bg-white/5 p-7 shadow-2xl">
         <h1 className="text-2xl font-semibold">{t('auth.setNewPassword')}</h1>
-        <p className="mt-2 text-sm text-slate-400">{t('auth.chooseStrongPassword')}</p>
+        <p className="mt-2 text-sm text-slate-400">
+          {ready ? t('auth.chooseStrongPassword') : 'Open the reset link from your email to continue.'}
+        </p>
         <form className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)}>
           <FormField>
             <FormLabel htmlFor="password">{t('auth.newPassword')}</FormLabel>
-            <Input id="password" type="password" disabled={loading} {...register('password')} />
+            <Input id="password" type="password" disabled={loading || !ready} {...register('password')} />
             {errors.password && <FormMessage>{errors.password.message}</FormMessage>}
           </FormField>
           <FormField>
             <FormLabel htmlFor="confirmPassword">{t('auth.confirmPassword')}</FormLabel>
-            <Input id="confirmPassword" type="password" disabled={loading} {...register('confirmPassword')} />
+            <Input id="confirmPassword" type="password" disabled={loading || !ready} {...register('confirmPassword')} />
             {errors.confirmPassword && <FormMessage>{errors.confirmPassword.message}</FormMessage>}
           </FormField>
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full" disabled={loading || !ready}>
             {loading ? t('auth.updating') : t('auth.updatePassword')}
           </Button>
         </form>
