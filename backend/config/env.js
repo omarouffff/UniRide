@@ -33,8 +33,8 @@ function validateEnv() {
     }
   });
 
-  if (!process.env.MONGO_URI && !process.env.MONGODB_URI) {
-    missing.push('MONGO_URI or MONGODB_URI');
+  if (!process.env.DATABASE_URL) {
+    missing.push('DATABASE_URL');
   }
 
   if (missing.length > 0) {

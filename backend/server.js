@@ -7,14 +7,12 @@ const RedisStore = require('rate-limit-redis');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const csrf = require('csurf');
-const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const dotenv = require('dotenv');
 const Sentry = require('@sentry/node');
 const expressWinston = require('express-winston');
 const { Server } = require('socket.io');
-const mongoose = require('mongoose');
-const { connectDatabase } = require('./config/db');
+const { connectDatabase, prisma } = require('./prisma/client');
 const { initRedis, getRedisClient } = require('./config/redisClient');
 const cloudinary = require('./config/cloudinary');
 const authRoutes = require('./routes/authRoutes');
@@ -26,7 +24,6 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { getRouteRoomName } = require('./utils/socketRooms');
 const { logger } = require('./utils/logger');
-const User = require('./models/User');
 const { verifyAccessToken } = require('./services/tokenService');
 
 dotenv.config();
@@ -124,7 +121,6 @@ app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
-app.use(mongoSanitize());
 app.use(xss());
 
 const createRateLimiter = (options) => {
@@ -203,8 +199,15 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/api/health', (req, res) => {
-  const dbState = mongoose.connection.readyState;
+app.get('/api/health', async (req, res) => {
+  let dbConnected = false;
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    dbConnected = true;
+  } catch (error) {
+    logger.warn('Prisma health check failed', { error: error.message });
+  }
+
   const cloudinaryConfig = cloudinary.config();
   const cloudinaryValues = [cloudinaryConfig.cloud_name, cloudinaryConfig.api_key, cloudinaryConfig.api_secret];
   const hasCloudinaryPlaceholder = cloudinaryValues.some((value) => typeof value === 'string' && value?.startsWith('your-'));
@@ -215,10 +218,7 @@ app.get('/api/health', (req, res) => {
     version: appVersion,
     environment: process.env.NODE_ENV || 'development',
     database: {
-      state: dbState,
-      connected: dbState === 1,
-      name: mongoose.connection.name || null,
-      host: mongoose.connection.host || null,
+      connected: dbConnected,
     },
     cloudinary: {
       configured: Boolean(cloudinaryConfig.cloud_name && cloudinaryConfig.api_key && cloudinaryConfig.api_secret && !hasCloudinaryPlaceholder),
@@ -246,15 +246,29 @@ io.use(async (socket, next) => {
   }
   try {
     const decoded = verifyAccessToken(authToken);
-    const user = await User.findById(decoded.id);
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: {
+        id: true,
+        role: true,
+        isActive: true,
+        sessions: true,
+      },
+    });
+
     if (!user) {
       return next(new Error('Unauthorized socket user'));
     }
-    const session = user.getSession(decoded.sid);
+
+    const session = user.sessions.find(
+      (entry) => entry.tokenId === decoded.sid && !entry.revoked && new Date(entry.expiresAt) > new Date()
+    );
+
     if (!session) {
       return next(new Error('Socket session invalid or expired'));
     }
-    socket.user = { id: user._id.toString(), role: user.role };
+
+    socket.user = { id: user.id, role: user.role };
     next();
   } catch (error) {
     next(new Error('Socket authentication failed'));
