@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
+    "build": "prisma generate",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push",
@@ -43,12 +44,12 @@
     "validator": "^13.9.0",
     "winston": "^3.10.0",
     "xss-clean": "^0.1.1",
+    "prisma": "^5.22.0",
     "zod": "^3.23.1"
   },
   "devDependencies": {
     "jest": "^30.4.2",
     "nodemon": "^3.0.1",
-    "prisma": "^5.22.0",
     "supertest": "^7.2.2"
   }
 }
