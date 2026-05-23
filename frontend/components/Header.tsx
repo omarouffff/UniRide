@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Menu, X, LogOut, Bell, User, Settings } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useAuthStore } from "@/store/useAuthStore"
-import api from "@/lib/api"
+import { useAuth } from "@/hooks/useAuth"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
 import { 
   DropdownMenu, 
@@ -28,6 +28,7 @@ export function Header() {
   const router = useRouter()
   const pathname = usePathname()
   const { user, clearAuth } = useAuthStore()
+  const { signOut } = useAuth()
   const { t } = useTranslation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
@@ -41,7 +42,7 @@ export function Header() {
   }, [])
 
   const handleLogout = async () => {
-    await api.post("/auth/logout").catch(() => undefined)
+    await signOut().catch(() => undefined)
     clearAuth()
     router.push("/login")
   }

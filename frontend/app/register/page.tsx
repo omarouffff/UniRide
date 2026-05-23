@@ -9,10 +9,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Upload, UserPlus } from 'lucide-react';
 import * as z from 'zod';
 import api from '@/lib/api';
+import { signUpWithEmail } from '@/lib/supabaseAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormField, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/components/ui/toast';
+import { useRedirectAuthenticated } from '@/hooks/useAuth';
 
 const schema = z.object({
   name: z.string().min(2, 'Enter your full name'),
@@ -34,6 +36,8 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm<Values>({ resolver: zodResolver(schema) });
 
+  useRedirectAuthenticated();
+
   async function onSubmit(values: Values) {
     const formData = new FormData();
     formData.append('name', values.name);
@@ -47,11 +51,38 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await api.post('/auth/register', formData);
-      toast({ variant: 'success', title: t('auth.register'), description: t('errors.verificationSubmitted') });
+      await api.post('/auth/register', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const supabaseResult = await signUpWithEmail({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        phoneNumber: values.phoneNumber,
+        college: values.college,
+        academicYear: values.academicYear,
+        universityId: values.universityId,
+      });
+
+      if (supabaseResult.error) {
+        throw supabaseResult.error;
+      }
+
+      toast({
+        variant: 'success',
+        title: t('auth.register'),
+        description: t('errors.verificationSubmitted'),
+      });
       router.push('/pending-approval');
     } catch (error: any) {
-      toast({ variant: 'error', title: t('errors.registrationFailed'), description: error?.response?.data?.message || t('errors.tryAgainLater') });
+      toast({
+        variant: 'error',
+        title: t('errors.registrationFailed'),
+        description: error?.message || error?.response?.data?.message || t('errors.tryAgainLater'),
+      });
     } finally {
       setLoading(false);
     }

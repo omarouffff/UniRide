@@ -8,13 +8,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { LogIn } from 'lucide-react';
 import * as z from 'zod';
 import { useTranslation } from 'react-i18next';
-import api, { refreshCsrfToken } from '@/lib/api';
-import { extractApiErrorMessage, getPostLoginPath, saveAuthTokens } from '@/lib/auth';
+import { useAuth } from '@/hooks/useAuth';
+import { refreshCsrfToken } from '@/lib/api';
+import { extractApiErrorMessage, getPostLoginPath } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormField, FormLabel, FormMessage } from '@/components/ui/form';
-import { useAuthStore } from '@/store/useAuthStore';
 import { useToast } from '@/components/ui/toast';
+import { useRedirectAuthenticated } from '@/hooks/useAuth';
 
 const schema = z.object({
   email: z.string().email('Enter a valid email'),
@@ -28,7 +29,7 @@ const isDev = process.env.NODE_ENV === 'development';
 export default function LoginPage() {
   const { t } = useTranslation();
   const router = useRouter();
-  const setUser = useAuthStore((state) => state.setUser);
+  const auth = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const schema = useMemo(
@@ -41,6 +42,8 @@ export default function LoginPage() {
   );
   const { register, handleSubmit, formState: { errors } } = useForm<Values>({ resolver: zodResolver(schema) });
 
+  useRedirectAuthenticated();
+
   async function onSubmit(values: Values) {
     setLoading(true);
     try {
@@ -50,20 +53,14 @@ export default function LoginPage() {
         console.log('[login] request', { email: values.email });
       }
 
-      const response = await api.post('/auth/login', values);
+      const user = await auth.signIn(values.email, values.password);
 
       if (isDev) {
         console.log('[login] response', {
-          user: response.data.user,
-          hasAccessToken: Boolean(response.data.accessToken),
-          hasRefreshToken: Boolean(response.data.refreshToken),
+          user,
+          hasAccessToken: Boolean(user),
         });
       }
-
-      const user = response.data.user;
-      saveAuthTokens(response.data.accessToken, response.data.refreshToken);
-      setUser(user);
-
       toast({
         variant: 'success',
         title: t('auth.login'),
