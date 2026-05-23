@@ -33,7 +33,7 @@ export default function NewBookingPage() {
 
   useEffect(() => {
     if (!user) {
-      router.replace('/auth/login');
+      router.replace('/login');
     }
   }, [router, user]);
 

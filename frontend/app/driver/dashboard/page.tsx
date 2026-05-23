@@ -32,7 +32,7 @@ export default function DriverDashboardPage() {
 
   useEffect(() => {
     if (!user) {
-      router.replace('/auth/login');
+      router.replace('/login');
       return;
     }
 
@@ -74,7 +74,7 @@ export default function DriverDashboardPage() {
             <p className="mt-2 text-slate-400">View active assigned rides and confirmed passenger details.</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button variant="outline" onClick={() => { clearAuth(); router.push('/auth/login'); }}>
+            <Button variant="outline" onClick={() => { clearAuth(); router.push('/login'); }}>
               Sign out
             </Button>
           </div>

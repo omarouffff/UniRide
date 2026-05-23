@@ -25,7 +25,7 @@ export default function VerifyUniversityIdPage() {
 
   useEffect(() => {
     if (!user) {
-      router.replace('/auth/login');
+      router.replace('/login');
     }
   }, [router, user]);
 
