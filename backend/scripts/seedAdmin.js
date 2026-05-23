@@ -1,55 +1,45 @@
-const dotenv = require('dotenv');
-const mongoose = require('mongoose');
-const User = require('../models/User');
-
-dotenv.config();
-
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@uniride.local';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-
-if (!ADMIN_PASSWORD) {
-  console.error('ADMIN_PASSWORD is required. Example: ADMIN_PASSWORD=YourSecurePass npm run seed:admin');
-  process.exit(1);
-}
+require('dotenv').config();
+const { prisma, connectDatabase } = require('../prisma/client');
 
 async function seedAdmin() {
-  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
-  if (!mongoUri) {
-    throw new Error('MONGO_URI or MONGODB_URI is not defined');
-  }
+  await connectDatabase();
 
-  await mongoose.connect(mongoUri);
+  const email = (process.env.ADMIN_EMAIL || 'admin@uniride.app').toLowerCase();
+  const name = process.env.ADMIN_NAME || 'UniRide Admin';
 
-  const existingAdmin = await User.findOne({ email: ADMIN_EMAIL });
-  if (existingAdmin) {
-    existingAdmin.name = 'UniRide Admin';
-    existingAdmin.phoneNumber = existingAdmin.phoneNumber || '+200000000000';
-    existingAdmin.role = 'admin';
-    existingAdmin.status = 'approved';
-    existingAdmin.universityIdStatus = 'approved';
-    existingAdmin.passwordHash = ADMIN_PASSWORD;
-    await existingAdmin.save();
-    console.log(`Admin updated: ${ADMIN_EMAIL}`);
-  } else {
-    await User.create({
-      name: 'UniRide Admin',
-      email: ADMIN_EMAIL,
-      phoneNumber: '+200000000000',
-      passwordHash: ADMIN_PASSWORD,
-      role: 'admin',
-      status: 'approved',
-      universityIdStatus: 'approved',
-      isActive: true,
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    const admin = await prisma.user.update({
+      where: { email },
+      data: {
+        role: 'admin',
+        status: 'approved',
+        universityIdStatus: 'approved',
+        isActive: true,
+        emailVerified: true,
+      },
     });
-    console.log(`Admin created: ${ADMIN_EMAIL}`);
+    console.log(`Admin user ready: ${admin.email}`);
+  } else {
+    const admin = await prisma.user.create({
+      data: {
+        email,
+        name,
+        role: 'admin',
+        status: 'approved',
+        universityIdStatus: 'approved',
+        isActive: true,
+        emailVerified: true,
+      },
+    });
+    console.log(`Admin user created: ${admin.email}`);
   }
 
-  console.log(`Admin password: ${ADMIN_PASSWORD}`);
-  await mongoose.disconnect();
+  await prisma.$disconnect();
 }
 
 seedAdmin().catch(async (error) => {
   console.error(error);
-  await mongoose.disconnect();
+  await prisma.$disconnect();
   process.exit(1);
 });

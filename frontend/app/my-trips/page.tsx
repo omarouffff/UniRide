@@ -114,7 +114,7 @@ export default function MyTripsPage() {
           {/* Action buttons */}
           <div className="flex gap-2">
             <Button
-              onClick={() => router.push('/booking')}
+              onClick={() => router.push('/bookings/new')}
               className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-5 rounded-xl shadow-lg shadow-blue-900/20"
             >
               Book New Ride
@@ -253,7 +253,7 @@ export default function MyTripsPage() {
                 <h3 className="font-semibold text-slate-400 text-lg">No trips found</h3>
                 <p className="text-sm text-slate-500 mt-1">There are no rides listed in this tab.</p>
                 <Button 
-                  onClick={() => router.push('/booking')}
+                  onClick={() => router.push('/bookings/new')}
                   className="mt-4 bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 rounded-xl"
                 >
                   Create Bookings

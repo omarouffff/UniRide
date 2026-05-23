@@ -1,9 +1,16 @@
 const asyncHandler = require('express-async-handler');
 const crypto = require('crypto');
-const Payment = require('../models/Payment');
-const Booking = require('../models/Booking');
+const { prisma } = require('../prisma/client');
+const paymentRepository = require('../repositories/paymentRepository');
+const bookingRepository = require('../repositories/bookingRepository');
 const { uploadToCloudinary } = require('../services/cloudinaryService');
 const paymentService = require('../services/paymentService');
+const { encryptQrPayload } = require('../utils/qrPayload');
+const { notifyPaymentSuccess, notifyBookingConfirmed } = require('../services/notificationService');
+
+function buildReference() {
+  return `UR-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 const createPayment = asyncHandler(async (req, res) => {
   const { bookingId, amount, method = 'cash', description } = req.body;
@@ -11,12 +18,9 @@ const createPayment = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Valid payment amount is required' });
   }
 
-  let booking = null;
   if (bookingId) {
-    booking = await Booking.findOne({ _id: bookingId, user: req.user._id });
-    if (!booking) {
-      return res.status(404).json({ message: 'Booking not found' });
-    }
+    const booking = await bookingRepository.findByUserAndId(req.user.id, bookingId);
+    if (!booking) return res.status(404).json({ message: 'Booking not found' });
   }
 
   let proofImage;
@@ -25,13 +29,13 @@ const createPayment = asyncHandler(async (req, res) => {
     proofImage = uploadResult.secure_url;
   }
 
-  const payment = await Payment.create({
-    user: req.user._id,
-    booking: booking?._id,
+  const payment = await paymentRepository.create({
+    userId: req.user.id,
+    bookingId: bookingId || null,
     amount: Number(amount),
     method,
-    status: proofImage ? 'pending' : method === 'cash' ? 'pending' : 'completed',
-    reference: `UR-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    status: proofImage ? 'under_review' : 'pending',
+    reference: buildReference(),
     description,
     proofImage,
   });
@@ -40,55 +44,57 @@ const createPayment = asyncHandler(async (req, res) => {
 });
 
 const getMyPayments = asyncHandler(async (req, res) => {
-  const payments = await Payment.find({ user: req.user._id }).populate('booking').sort({ createdAt: -1 });
+  const payments = await paymentRepository.findByUser(req.user.id);
   res.json({ payments });
 });
 
 const getAllPayments = asyncHandler(async (req, res) => {
-  const payments = await Payment.find().populate('user', 'name email').populate('booking').sort({ createdAt: -1 });
+  const payments = await paymentRepository.findAll();
   res.json({ payments });
 });
 
-// Initialize Paymob payment
 const initializePaymob = asyncHandler(async (req, res) => {
   const { bookingId, amount } = req.body;
-  if (!bookingId) {
-    return res.status(400).json({ message: 'Booking ID is required' });
-  }
-  if (!amount || Number(amount) <= 0) {
-    return res.status(400).json({ message: 'Valid payment amount is required' });
-  }
+  if (!bookingId) return res.status(400).json({ message: 'Booking ID is required' });
+  if (!amount || Number(amount) <= 0) return res.status(400).json({ message: 'Valid payment amount is required' });
 
-  const booking = await Booking.findOne({ _id: bookingId, user: req.user._id });
-  if (!booking) {
-    return res.status(404).json({ message: 'Booking not found' });
-  }
+  const booking = await bookingRepository.findByUserAndId(req.user.id, bookingId);
+  if (!booking) return res.status(404).json({ message: 'Booking not found' });
 
-  const paymobData = await paymentService.initializePaymobPayment(
-    req.user._id,
-    bookingId,
-    Number(amount)
-  );
-
+  const paymobData = await paymentService.initializePaymobPayment(req.user.id, bookingId, Number(amount));
   res.status(200).json(paymobData);
 });
 
-// Handle Paymob Webhook
+const initializeFawry = asyncHandler(async (req, res) => {
+  const { bookingId, amount } = req.body;
+  if (!bookingId || !amount) {
+    return res.status(400).json({ message: 'Booking ID and amount are required' });
+  }
+  const booking = await bookingRepository.findByUserAndId(req.user.id, bookingId);
+  if (!booking) return res.status(404).json({ message: 'Booking not found' });
+  const data = await paymentService.initializeFawryPayment(req.user.id, bookingId, Number(amount));
+  res.json(data);
+});
+
+const initializeStripe = asyncHandler(async (req, res) => {
+  const { bookingId, amount } = req.body;
+  if (!bookingId || !amount) {
+    return res.status(400).json({ message: 'Booking ID and amount are required' });
+  }
+  const booking = await bookingRepository.findByUserAndId(req.user.id, bookingId);
+  if (!booking) return res.status(404).json({ message: 'Booking not found' });
+  const data = await paymentService.initializeStripePayment(req.user.id, bookingId, Number(amount));
+  res.json(data);
+});
+
 const handlePaymobWebhook = asyncHandler(async (req, res) => {
   const receivedHmac = req.query.hmac;
   const hmacSecret = process.env.PAYMOB_HMAC_SECRET;
-
-  if (!hmacSecret) {
-    console.error('PAYMOB_HMAC_SECRET is not configured');
-    return res.status(500).json({ message: 'Server configuration error' });
-  }
+  if (!hmacSecret) return res.status(500).json({ message: 'Server configuration error' });
 
   const obj = req.body.obj;
-  if (!obj) {
-    return res.status(400).json({ message: 'Invalid payload' });
-  }
+  if (!obj) return res.status(400).json({ message: 'Invalid payload' });
 
-  // 1. Re-calculate the Paymob HMAC signature
   const orderId = obj.order ? (typeof obj.order === 'object' ? obj.order.id : obj.order) : '';
   const pan = obj.source_data ? obj.source_data.pan : '';
   const subType = obj.source_data ? obj.source_data.sub_type : '';
@@ -114,199 +120,158 @@ const handlePaymobWebhook = asyncHandler(async (req, res) => {
     pan,
     subType,
     type,
-    obj.success
+    obj.success,
   ];
 
-  const concatenatedString = fields.map(val => {
-    if (val === undefined || val === null) return '';
-    return String(val);
-  }).join('');
-
-  const calculatedHmac = crypto
-    .createHmac('sha512', hmacSecret)
-    .update(concatenatedString)
-    .digest('hex');
-
-  // 2. Constant-time secure verification to prevent timing attacks
+  const concatenatedString = fields.map((val) => (val === undefined || val === null ? '' : String(val))).join('');
+  const calculatedHmac = crypto.createHmac('sha512', hmacSecret).update(concatenatedString).digest('hex');
   const buf1 = crypto.createHash('sha256').update(calculatedHmac).digest();
   const buf2 = crypto.createHash('sha256').update(receivedHmac || '').digest();
-
   if (!crypto.timingSafeEqual(buf1, buf2)) {
-    console.warn('Paymob webhook HMAC verification failed');
     return res.status(401).json({ message: 'Invalid signature' });
   }
 
-  // 3. Process verification
   const isSuccess = obj.success === true || String(obj.success) === 'true';
-  const paymentStatus = isSuccess ? 'success' : 'failed';
-
-  const verificationResult = await paymentService.verifyPaymobPayment(orderId, paymentStatus);
-
-  // 4. Trigger socket update to inform user immediately
+  const verificationResult = await paymentService.verifyPaymobPayment(orderId, isSuccess ? 'success' : 'failed');
   const io = req.app.get('io');
+
   if (io && verificationResult.booking) {
     const booking = verificationResult.booking;
-    
-    // Generate QR code if booking confirmed but not yet set
     if (isSuccess && !booking.qrPayload) {
-      const { encryptQrPayload } = require('../utils/qrPayload');
-      booking.qrPayload = encryptQrPayload({
-        bookingId: booking._id,
-        userId: booking.user,
-        tripId: booking.trip,
+      const qrPayload = encryptQrPayload({
+        bookingId: booking.id,
+        userId: booking.userId,
+        tripId: booking.tripId,
         seat: booking.seat,
       });
-      await booking.save();
+      await prisma.booking.update({ where: { id: booking.id }, data: { qrPayload } });
+      booking.qrPayload = qrPayload;
     }
-
-    io.to(booking.user.toString()).emit('bookingUpdate', {
-      id: booking._id,
+    io.to(booking.userId).emit('bookingUpdate', {
+      id: booking.id,
       status: booking.status,
       seat: booking.seat || null,
       qrPayload: booking.qrPayload || null,
     });
+    if (isSuccess) {
+      await notifyPaymentSuccess(booking.userId, verificationResult.payment, io).catch(() => undefined);
+      await notifyBookingConfirmed(booking.userId, booking, io).catch(() => undefined);
+    }
   }
 
   res.status(200).json({ status: 'verified', success: isSuccess });
 });
 
 const verifyCashPayment = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body; // 'completed' or 'failed'
-
+  const { status } = req.body;
   if (!['completed', 'failed'].includes(status)) {
     return res.status(400).json({ message: 'Invalid payment status. Must be completed or failed' });
   }
 
-  const payment = await Payment.findById(id).populate('booking');
-  if (!payment) {
-    return res.status(404).json({ message: 'Payment record not found' });
-  }
+  const payment = await paymentRepository.findById(req.params.id);
+  if (!payment) return res.status(404).json({ message: 'Payment record not found' });
 
-  if (payment.method !== 'cash') {
-    return res.status(400).json({ message: 'Only cash/proof payments can be verified manually' });
-  }
+  const updated = await paymentRepository.update(payment.id, {
+    status,
+    verifiedAt: new Date(),
+    verifiedBy: req.user.id,
+  });
 
-  payment.status = status;
-  await payment.save();
-
-  if (payment.booking) {
-    const booking = await Booking.findById(payment.booking);
+  if (payment.bookingId) {
+    const booking = await prisma.booking.findUnique({ where: { id: payment.bookingId } });
     if (booking) {
-      if (status === 'completed') {
-        booking.status = 'confirmed';
-        
-        // Generate QR code if booking confirmed but not yet set
-        if (!booking.qrPayload) {
-          const { encryptQrPayload } = require('../utils/qrPayload');
-          booking.qrPayload = encryptQrPayload({
-            bookingId: booking._id,
-            userId: booking.user,
-            tripId: booking.trip,
-            seat: booking.seat,
-          });
-        }
-        await booking.save();
-
-        // Trigger socket update to inform user immediately
-        const io = req.app.get('io');
-        if (io) {
-          io.to(booking.user.toString()).emit('bookingUpdate', {
-            id: booking._id,
-            status: booking.status,
-            seat: booking.seat || null,
-            qrPayload: booking.qrPayload || null,
-          });
-        }
-      } else {
-        booking.status = 'cancelled';
-        await booking.save();
-        
-        // Trigger socket update to inform user immediately
-        const io = req.app.get('io');
-        if (io) {
-          io.to(booking.user.toString()).emit('bookingUpdate', {
-            id: booking._id,
-            status: booking.status,
-            seat: null,
-            qrPayload: null,
-          });
-        }
+      let qrPayload = booking.qrPayload;
+      if (status === 'completed' && !qrPayload) {
+        qrPayload = encryptQrPayload({
+          bookingId: booking.id,
+          userId: booking.userId,
+          tripId: booking.tripId,
+          seat: booking.seat,
+        });
+      }
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: {
+          status: status === 'completed' ? 'confirmed' : 'cancelled',
+          qrPayload: status === 'completed' ? qrPayload : null,
+        },
+      });
+      const io = req.app.get('io');
+      if (io) {
+        io.to(booking.userId).emit('bookingUpdate', {
+          id: booking.id,
+          status: status === 'completed' ? 'confirmed' : 'cancelled',
+          seat: booking.seat || null,
+          qrPayload: status === 'completed' ? qrPayload : null,
+        });
       }
     }
   }
 
-  res.json({ message: `Payment verified as ${status}`, payment });
+  res.json({ message: `Payment verified as ${status}`, payment: updated });
 });
 
 const handleFawryWebhook = asyncHandler(async (req, res) => {
   const { merchantRefNumber, fawryRefNumber, paymentStatus, messageSignature } = req.body;
-
   if (!merchantRefNumber || !paymentStatus) {
     return res.status(400).json({ message: 'Invalid Fawry webhook payload' });
   }
 
   const securityKey = process.env.FAWRY_SECURITY_KEY;
-  if (!securityKey) {
-    return res.status(500).json({ message: 'Fawry security key not configured' });
-  }
+  if (!securityKey) return res.status(500).json({ message: 'Fawry security key not configured' });
 
   if (messageSignature) {
-    const crypto = require('crypto');
     const expected = crypto
       .createHash('sha256')
       .update(`${merchantRefNumber}${fawryRefNumber || ''}${paymentStatus}${securityKey}`)
       .digest('hex');
     if (expected !== messageSignature) {
-      console.warn('Fawry webhook signature verification failed');
       return res.status(401).json({ message: 'Invalid signature' });
     }
   }
 
-  const payment = await Payment.findOne({ reference: merchantRefNumber, method: 'fawry' });
-  if (!payment) {
+  const payment = await paymentRepository.findByReference(merchantRefNumber);
+  if (!payment || payment.method !== 'fawry') {
     return res.status(404).json({ message: 'Payment not found' });
   }
 
   const isPaid = String(paymentStatus).toUpperCase() === 'PAID';
-  payment.status = isPaid ? 'completed' : 'failed';
-  payment.metadata = { ...payment.metadata, fawryRefNumber, webhookAt: new Date() };
-  await payment.save();
+  const updated = await paymentRepository.update(payment.id, {
+    status: isPaid ? 'completed' : 'failed',
+    metadata: { ...(payment.metadata || {}), fawryRefNumber, webhookAt: new Date() },
+  });
 
-  if (isPaid && payment.booking) {
-    const booking = await Booking.findById(payment.booking);
+  if (isPaid && payment.bookingId) {
+    const booking = await prisma.booking.findUnique({ where: { id: payment.bookingId } });
     if (booking) {
-      booking.status = 'confirmed';
-      if (!booking.qrPayload) {
-        const { encryptQrPayload } = require('../utils/qrPayload');
-        booking.qrPayload = encryptQrPayload({
-          bookingId: booking._id,
-          userId: booking.user,
-          tripId: booking.trip,
+      let qrPayload = booking.qrPayload;
+      if (!qrPayload) {
+        qrPayload = encryptQrPayload({
+          bookingId: booking.id,
+          userId: booking.userId,
+          tripId: booking.tripId,
           seat: booking.seat,
         });
       }
-      await booking.save();
-
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: { status: 'confirmed', qrPayload },
+      });
       const io = req.app.get('io');
-      const { notifyPaymentSuccess, notifyBookingConfirmed } = require('../services/notificationService');
-      const user = await require('../models/User').findById(booking.user);
-      if (user) {
-        await notifyPaymentSuccess(user._id, payment, io).catch(() => {});
-        await notifyBookingConfirmed(user._id, booking, io).catch(() => {});
-      }
+      await notifyPaymentSuccess(booking.userId, updated, io).catch(() => undefined);
+      await notifyBookingConfirmed(booking.userId, booking, io).catch(() => undefined);
       if (io) {
-        io.to(booking.user.toString()).emit('bookingUpdate', {
-          id: booking._id,
-          status: booking.status,
+        io.to(booking.userId).emit('bookingUpdate', {
+          id: booking.id,
+          status: 'confirmed',
           seat: booking.seat || null,
-          qrPayload: booking.qrPayload || null,
+          qrPayload,
         });
       }
     }
   }
 
-  res.status(200).json({ success: true, status: payment.status });
+  res.status(200).json({ success: true, status: updated.status });
 });
 
 module.exports = {
@@ -314,6 +279,8 @@ module.exports = {
   getMyPayments,
   getAllPayments,
   initializePaymob,
+  initializeFawry,
+  initializeStripe,
   handlePaymobWebhook,
   handleFawryWebhook,
   verifyCashPayment,

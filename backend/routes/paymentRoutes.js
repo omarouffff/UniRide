@@ -4,6 +4,8 @@ const {
   getMyPayments,
   getAllPayments,
   initializePaymob,
+  initializeFawry,
+  initializeStripe,
   handlePaymobWebhook,
   handleFawryWebhook,
   verifyCashPayment,
@@ -13,14 +15,14 @@ const upload = require('../middleware/uploadMiddleware');
 
 const router = express.Router();
 
-// Public webhook route (Paymob needs this unauthenticated)
 router.post('/webhook', handlePaymobWebhook);
 router.post('/fawry/webhook', handleFawryWebhook);
 
-// Protected routes (require valid session token)
 router.use(protect);
 router.post('/', upload.single('proofImage'), createPayment);
 router.post('/paymob/initialize', initializePaymob);
+router.post('/fawry/initialize', initializeFawry);
+router.post('/stripe/initialize', initializeStripe);
 router.get('/mine', getMyPayments);
 router.get('/', authorizeRoles('admin'), getAllPayments);
 router.patch('/:id/verify', authorizeRoles('admin'), verifyCashPayment);

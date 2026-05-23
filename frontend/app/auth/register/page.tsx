@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
-export default function LegacyRegisterPage() {
+export default function AuthRegisterRedirect() {
   redirect('/register');
 }

@@ -24,7 +24,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { getRouteRoomName } = require('./utils/socketRooms');
 const { logger } = require('./utils/logger');
-const { verifyAccessToken } = require('./services/tokenService');
+const { resolveUserFromToken } = require('./middleware/authMiddleware');
 
 dotenv.config();
 
@@ -245,29 +245,10 @@ io.use(async (socket, next) => {
     return next(new Error('Authentication required for socket connection'));
   }
   try {
-    const decoded = verifyAccessToken(authToken);
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: {
-        id: true,
-        role: true,
-        isActive: true,
-        sessions: true,
-      },
-    });
-
-    if (!user) {
+    const user = await resolveUserFromToken(authToken);
+    if (!user || !user.isActive) {
       return next(new Error('Unauthorized socket user'));
     }
-
-    const session = user.sessions.find(
-      (entry) => entry.tokenId === decoded.sid && !entry.revoked && new Date(entry.expiresAt) > new Date()
-    );
-
-    if (!session) {
-      return next(new Error('Socket session invalid or expired'));
-    }
-
     socket.user = { id: user.id, role: user.role };
     next();
   } catch (error) {

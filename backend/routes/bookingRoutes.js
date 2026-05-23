@@ -5,6 +5,8 @@ const { protect, requireApproved } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
+router.get('/public/trips', getAvailableTrips);
+
 router.use(protect);
 router.get('/dashboard', getDashboard);
 router.get('/trips', requireApproved, getAvailableTrips);

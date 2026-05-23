@@ -6,8 +6,8 @@ import Providers from '@/components/providers/Providers';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'UNI Transportation',
-  description: 'Student transportation booking and admin dashboard platform.',
+  title: 'UniRide — Campus Transportation',
+  description: 'Book seats, scan QR boarding passes, and track live trips.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

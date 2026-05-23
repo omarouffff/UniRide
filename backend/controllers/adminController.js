@@ -1,194 +1,167 @@
 const asyncHandler = require('express-async-handler');
-const User = require('../models/User');
-const Trip = require('../models/Trip');
-const Booking = require('../models/Booking');
-const Payment = require('../models/Payment');
+const { prisma } = require('../prisma/client');
+const userRepository = require('../repositories/userRepository');
+const tripRepository = require('../repositories/tripRepository');
+const bookingRepository = require('../repositories/bookingRepository');
+const paymentRepository = require('../repositories/paymentRepository');
+const { toSafeUser } = require('../utils/userMapper');
+const { getSupabaseAdmin } = require('../config/supabase');
+
+async function syncSupabaseMetadata(user) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase || !user.supabaseId) return;
+  await supabase.auth.admin.updateUserById(user.supabaseId, {
+    app_metadata: { role: user.role, status: user.status },
+    user_metadata: {
+      role: user.role,
+      status: user.status,
+      universityIdStatus: user.universityIdStatus,
+    },
+  }).catch(() => undefined);
+}
 
 const getUsers = asyncHandler(async (req, res) => {
   const { status, role } = req.query;
-  const filter = {};
-
-  if (status) {
-    filter.status = status === 'verified' ? 'approved' : status;
-  }
-
-  if (role) {
-    filter.role = role;
-  }
-
-  const users = await User.find(filter)
-    .select('-passwordHash')
-    .sort({ createdAt: -1 });
-
-  res.json({ users: users.map((user) => user.toSafeObject()) });
+  const where = {};
+  if (status) where.status = status === 'verified' ? 'approved' : status;
+  if (role) where.role = role;
+  const users = await userRepository.findMany(where);
+  res.json({ users: users.map(toSafeUser) });
 });
 
 const getPendingUsers = asyncHandler(async (req, res) => {
-  const users = await User.find({ role: 'student', status: 'pending' })
-    .select('-passwordHash')
-    .sort({ createdAt: -1 });
-
-  res.json({ users: users.map((user) => user.toSafeObject()) });
+  const users = await userRepository.findMany({ role: 'student', status: 'pending' });
+  res.json({ users: users.map(toSafeUser) });
 });
 
 const updateUserStatus = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { status, reviewNotes, role } = req.body;
+  const existing = await userRepository.findById(userId);
+  if (!existing) return res.status(404).json({ message: 'User not found' });
 
-  const user = await User.findById(userId);
-  if (!user) {
-    return res.status(404).json({ message: 'User not found' });
-  }
-
+  const updates = {};
   if (status) {
-    const normalizedStatus = status === 'verified' ? 'approved' : status;
-    if (!['pending', 'approved', 'rejected'].includes(normalizedStatus)) {
+    const normalized = status === 'verified' ? 'approved' : status;
+    if (!['pending', 'approved', 'rejected'].includes(normalized)) {
       return res.status(400).json({ message: 'Invalid status value' });
     }
-    user.status = normalizedStatus;
-    user.universityIdStatus = normalizedStatus;
-    user.reviewedAt = new Date();
+    updates.status = normalized;
+    updates.universityIdStatus = normalized;
+    updates.reviewedAt = new Date();
   }
+  if (reviewNotes !== undefined) updates.reviewNotes = reviewNotes;
+  if (role && ['student', 'admin', 'driver'].includes(role)) updates.role = role;
 
-  if (reviewNotes !== undefined) {
-    user.reviewNotes = reviewNotes;
-  }
-
-  if (role && ['student', 'admin', 'driver'].includes(role)) {
-    user.role = role;
-  }
-
-  await user.save();
-
-  res.json({ user: user.toSafeObject() });
+  const user = await userRepository.update(userId, updates);
+  await syncSupabaseMetadata(user);
+  res.json({ user: toSafeUser(user) });
 });
 
 const approveUser = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (!user) {
-    return res.status(404).json({ message: 'User not found' });
-  }
-
-  user.status = 'approved';
-  user.universityIdStatus = 'approved';
-  user.reviewedAt = new Date();
-  user.reviewNotes = undefined;
-  await user.save();
-
-  res.json({ message: 'User approved successfully', user: user.toSafeObject() });
+  const user = await userRepository.update(req.params.id, {
+    status: 'approved',
+    universityIdStatus: 'approved',
+    reviewedAt: new Date(),
+    reviewNotes: null,
+  });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  await syncSupabaseMetadata(user);
+  res.json({ message: 'User approved successfully', user: toSafeUser(user) });
 });
 
 const rejectUser = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (!user) {
-    return res.status(404).json({ message: 'User not found' });
-  }
-
-  user.status = 'rejected';
-  user.universityIdStatus = 'rejected';
-  user.reviewedAt = new Date();
-  user.reviewNotes = req.body?.reviewNotes || 'Rejected by administration';
-  await user.save();
-
-  res.json({ message: 'User rejected successfully', user: user.toSafeObject() });
+  const user = await userRepository.update(req.params.id, {
+    status: 'rejected',
+    universityIdStatus: 'rejected',
+    reviewedAt: new Date(),
+    reviewNotes: req.body?.reviewNotes || 'Rejected by administration',
+  });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  await syncSupabaseMetadata(user);
+  res.json({ message: 'User rejected successfully', user: toSafeUser(user) });
 });
 
 const banUser = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (!user) {
-    return res.status(404).json({ message: 'User not found' });
-  }
-
-  user.isActive = false;
-  user.reviewNotes = req.body?.reviewNotes || 'Banned by administration';
-  user.reviewedAt = new Date();
-  await user.save();
-
-  res.json({ message: 'User banned successfully', user: user.toSafeObject() });
+  const user = await userRepository.update(req.params.id, {
+    isActive: false,
+    reviewNotes: req.body?.reviewNotes || 'Banned by administration',
+    reviewedAt: new Date(),
+  });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  res.json({ message: 'User banned successfully', user: toSafeUser(user) });
 });
 
 const deleteUser = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (!user) {
-    return res.status(404).json({ message: 'User not found' });
-  }
-
-  await Promise.all([
-    Booking.deleteMany({ user: user._id }),
-    Payment.deleteMany({ user: user._id }),
-    User.deleteOne({ _id: user._id }),
+  const user = await userRepository.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  await prisma.$transaction([
+    prisma.booking.deleteMany({ where: { userId: user.id } }),
+    prisma.payment.deleteMany({ where: { userId: user.id } }),
+    prisma.user.delete({ where: { id: user.id } }),
   ]);
-
   res.json({ message: 'User and related records deleted successfully' });
 });
 
 const createTrip = asyncHandler(async (req, res) => {
-  const { title, pickupPoint, destination, busNumber, capacity, departureTime, driver } = req.body;
+  const { title, pickupPoint, destination, busNumber, capacity, departureTime, driverId, routeId, busId } = req.body;
   if (!title || !pickupPoint || !destination || !busNumber || !capacity || !departureTime) {
     return res.status(400).json({ message: 'Trip title, route, bus, capacity, and departure time are required' });
   }
-
-  const trip = await Trip.create({
+  const trip = await tripRepository.create({
     title,
     pickupPoint,
     destination,
     busNumber,
-    capacity,
-    departureTime,
-    driver: driver || undefined,
+    capacity: Number(capacity),
+    departureTime: new Date(departureTime),
+    driverId: driverId || null,
+    routeId: routeId || null,
+    busId: busId || null,
   });
-
   res.status(201).json({ trip });
 });
 
 const getTrips = asyncHandler(async (req, res) => {
-  const { active, page = 1, limit = 50, driver } = req.query;
-  const filter = {};
-  if (active !== 'false') filter.isActive = true;
-  if (driver) filter.driver = driver;
-
-  const skip = (Math.max(Number(page), 1) - 1) * Math.min(Number(limit), 100);
+  const { active, page = 1, limit = 50, driverId } = req.query;
+  const where = {};
+  if (active !== 'false') where.isActive = true;
+  if (driverId) where.driverId = driverId;
+  const take = Math.min(Number(limit), 100);
+  const skip = (Math.max(Number(page), 1) - 1) * take;
   const [trips, total] = await Promise.all([
-    Trip.find(filter).populate('driver', 'name email').sort({ departureTime: 1 }).skip(skip).limit(Math.min(Number(limit), 100)),
-    Trip.countDocuments(filter),
+    tripRepository.findMany(where, { skip, take }),
+    tripRepository.count(where),
   ]);
-
-  res.json({ trips, total, page: Number(page), limit: Number(limit) });
+  res.json({ trips, total, page: Number(page), limit: take });
 });
 
 const updateTrip = asyncHandler(async (req, res) => {
-  const trip = await Trip.findById(req.params.id);
-  if (!trip) {
-    return res.status(404).json({ message: 'Trip not found' });
-  }
-
-  const fields = ['title', 'pickupPoint', 'destination', 'busNumber', 'capacity', 'departureTime', 'driver', 'isActive'];
+  const trip = await tripRepository.findById(req.params.id);
+  if (!trip) return res.status(404).json({ message: 'Trip not found' });
+  const fields = ['title', 'pickupPoint', 'destination', 'busNumber', 'capacity', 'departureTime', 'driverId', 'isActive', 'routeId', 'busId'];
+  const data = {};
   fields.forEach((field) => {
-    if (req.body[field] !== undefined) trip[field] = req.body[field];
+    if (req.body[field] !== undefined) {
+      data[field] = field === 'departureTime' ? new Date(req.body[field]) : req.body[field];
+    }
   });
-
-  await trip.save();
-  res.json({ trip });
+  const updated = await tripRepository.update(req.params.id, data);
+  res.json({ trip: updated });
 });
 
 const deleteTrip = asyncHandler(async (req, res) => {
-  const trip = await Trip.findById(req.params.id);
-  if (!trip) {
-    return res.status(404).json({ message: 'Trip not found' });
-  }
-
-  const activeBookings = await Booking.countDocuments({
-    trip: trip._id,
-    status: { $in: ['confirmed', 'waiting'] },
+  const trip = await tripRepository.findById(req.params.id);
+  if (!trip) return res.status(404).json({ message: 'Trip not found' });
+  const activeBookings = await bookingRepository.count({
+    tripId: trip.id,
+    status: { in: ['confirmed', 'waiting'] },
   });
-
   if (activeBookings > 0) {
-    trip.isActive = false;
-    await trip.save();
-    return res.json({ message: 'Trip deactivated (has active bookings)', trip });
+    const deactivated = await tripRepository.update(trip.id, { isActive: false });
+    return res.json({ message: 'Trip deactivated (has active bookings)', trip: deactivated });
   }
-
-  await Trip.deleteOne({ _id: trip._id });
+  await tripRepository.remove(trip.id);
   res.json({ message: 'Trip deleted successfully' });
 });
 
@@ -197,46 +170,160 @@ const getAnalytics = asyncHandler(async (req, res) => {
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  const [bookingsCount, pendingUsers, noShowStats, tripsCount, confirmedBookings, waitingBookings, revenue, expenses] = await Promise.all([
-    Booking.countDocuments(),
-    User.countDocuments({ status: 'pending' }),
-    User.aggregate([{ $group: { _id: null, total: { $sum: '$noShowCount' } } }]),
-    Trip.countDocuments({ isActive: true }),
-    Booking.countDocuments({ status: 'confirmed' }),
-    Booking.countDocuments({ status: 'waiting' }),
-    Payment.aggregate([
-      { $match: { status: 'completed', createdAt: { $gte: startOfMonth } } },
-      { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
-    ]),
-    Payment.aggregate([
-      { $match: { status: 'refunded', createdAt: { $gte: startOfMonth } } },
-      { $group: { _id: null, total: { $sum: '$amount' } } },
-    ]),
+  const [
+    bookingsCount,
+    pendingUsers,
+    noShowAggregate,
+    tripsCount,
+    confirmedBookings,
+    waitingBookings,
+    revenueData,
+  ] = await Promise.all([
+    bookingRepository.count(),
+    userRepository.count({ status: 'pending' }),
+    prisma.user.aggregate({ _sum: { noShowCount: true } }),
+    tripRepository.count({ isActive: true }),
+    bookingRepository.count({ status: 'confirmed' }),
+    bookingRepository.count({ status: 'waiting' }),
+    paymentRepository.aggregateRevenue(startOfMonth),
   ]);
-
-  const monthlyRevenue = revenue[0]?.total || 0;
-  const monthlyExpenses = expenses[0]?.total || 0;
 
   res.json({
     bookingsCount,
     pendingUsers,
-    noShowStats: noShowStats[0]?.total || 0,
+    noShowStats: noShowAggregate._sum.noShowCount || 0,
     tripsCount,
     confirmedBookings,
     waitingBookings,
-    monthlyRevenue,
-    monthlyExpenses,
-    profit: monthlyRevenue - monthlyExpenses,
-    completedPayments: revenue[0]?.count || 0,
+    monthlyRevenue: revenueData.revenue,
+    monthlyExpenses: revenueData.refunds,
+    profit: revenueData.revenue - revenueData.refunds,
+    completedPayments: revenueData.count,
   });
 });
 
 const getBookings = asyncHandler(async (req, res) => {
-  const bookings = await Booking.find()
-    .populate('user', 'name email universityId')
-    .populate('trip', 'title busNumber pickupPoint destination')
-    .sort({ createdAt: -1 });
+  const bookings = await bookingRepository.findMany();
   res.json({ bookings });
+});
+
+const getRoutes = asyncHandler(async (req, res) => {
+  const routes = await prisma.route.findMany({
+    include: { schedules: true, _count: { select: { trips: true } } },
+    orderBy: { name: 'asc' },
+  });
+  res.json({ routes });
+});
+
+const upsertRoute = asyncHandler(async (req, res) => {
+  const { id, name, pickupPoint, destination, distanceKm, baseFare, isActive } = req.body;
+  if (!name || !pickupPoint || !destination) {
+    return res.status(400).json({ message: 'Route name and endpoints are required' });
+  }
+  const data = {
+    name,
+    pickupPoint,
+    destination,
+    distanceKm: distanceKm ? Number(distanceKm) : null,
+    baseFare: baseFare ? Number(baseFare) : 0,
+    isActive: isActive !== false,
+  };
+  const route = id
+    ? await prisma.route.update({ where: { id }, data })
+    : await prisma.route.create({ data });
+  res.json({ route });
+});
+
+const getBuses = asyncHandler(async (req, res) => {
+  const buses = await prisma.bus.findMany({
+    include: { driver: { select: { id: true, name: true, email: true } } },
+    orderBy: { busNumber: 'asc' },
+  });
+  res.json({ buses });
+});
+
+const upsertBus = asyncHandler(async (req, res) => {
+  const { id, busNumber, capacity, make, model, licensePlate, driverId, status, amenities } = req.body;
+  if (!busNumber || !capacity) {
+    return res.status(400).json({ message: 'Bus number and capacity are required' });
+  }
+  const data = {
+    busNumber,
+    capacity: Number(capacity),
+    make,
+    model,
+    licensePlate,
+    driverId: driverId || null,
+    status: status || 'active',
+    amenities: Array.isArray(amenities) ? amenities : [],
+  };
+  const bus = id
+    ? await prisma.bus.update({ where: { id }, data })
+    : await prisma.bus.create({ data });
+  res.json({ bus });
+});
+
+const getPayments = asyncHandler(async (req, res) => {
+  const payments = await paymentRepository.findAll();
+  res.json({ payments });
+});
+
+const verifyPayment = asyncHandler(async (req, res) => {
+  const { status, adminNote } = req.body;
+  const payment = await paymentRepository.findById(req.params.id);
+  if (!payment) return res.status(404).json({ message: 'Payment not found' });
+
+  const nextStatus = status === 'approved' ? 'completed' : status === 'rejected' ? 'failed' : status;
+  if (!['completed', 'failed', 'under_review'].includes(nextStatus)) {
+    return res.status(400).json({ message: 'Invalid payment status' });
+  }
+
+  const updated = await paymentRepository.update(payment.id, {
+    status: nextStatus,
+    verifiedAt: new Date(),
+    verifiedBy: req.user.id,
+    metadata: { ...(payment.metadata || {}), adminNote },
+  });
+  res.json({ payment: updated });
+});
+
+const getComplaints = asyncHandler(async (req, res) => {
+  const complaints = await prisma.complaint.findMany({
+    include: { user: { select: { id: true, name: true, email: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json({ complaints });
+});
+
+const updateComplaint = asyncHandler(async (req, res) => {
+  const { status, adminNote } = req.body;
+  const complaint = await prisma.complaint.update({
+    where: { id: req.params.id },
+    data: { status, adminNote },
+  });
+  res.json({ complaint });
+});
+
+const getMonthlyReport = asyncHandler(async (req, res) => {
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const months = [];
+  for (let month = 0; month < 12; month += 1) {
+    const start = new Date(year, month, 1);
+    const end = new Date(year, month + 1, 0, 23, 59, 59);
+    const data = await paymentRepository.aggregateRevenue(start);
+    const bookings = await bookingRepository.count({
+      createdAt: { gte: start, lte: end },
+    });
+    months.push({
+      month: month + 1,
+      revenue: data.revenue,
+      refunds: data.refunds,
+      profit: data.revenue - data.refunds,
+      bookings,
+      payments: data.count,
+    });
+  }
+  res.json({ year, months });
 });
 
 module.exports = {
@@ -253,4 +340,13 @@ module.exports = {
   deleteTrip,
   getAnalytics,
   getBookings,
+  getRoutes,
+  upsertRoute,
+  getBuses,
+  upsertBus,
+  getPayments,
+  verifyPayment,
+  getComplaints,
+  updateComplaint,
+  getMonthlyReport,
 };

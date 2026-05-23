@@ -1,29 +1,27 @@
 const asyncHandler = require('express-async-handler');
-const Notification = require('../models/Notification');
+const { prisma } = require('../prisma/client');
 
 const getNotifications = asyncHandler(async (req, res) => {
   const { unreadOnly, limit = 50, page = 1 } = req.query;
-  const filter = { user: req.user._id };
-  if (unreadOnly === 'true') filter.read = false;
+  const where = { userId: req.user.id };
+  if (unreadOnly === 'true') where.read = false;
 
-  const skip = (Math.max(Number(page), 1) - 1) * Math.min(Number(limit), 100);
+  const take = Math.min(Number(limit), 100);
+  const skip = (Math.max(Number(page), 1) - 1) * take;
 
   const [notifications, total, unreadCount] = await Promise.all([
-    Notification.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Math.min(Number(limit), 100)).lean(),
-    Notification.countDocuments(filter),
-    Notification.countDocuments({ user: req.user._id, read: false }),
+    prisma.notification.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+    }),
+    prisma.notification.count({ where }),
+    prisma.notification.count({ where: { userId: req.user.id, read: false } }),
   ]);
 
   res.json({
-    notifications: notifications.map((n) => ({
-      id: n._id,
-      type: n.type,
-      title: n.title,
-      message: n.message,
-      read: n.read,
-      metadata: n.metadata,
-      createdAt: n.createdAt,
-    })),
+    notifications,
     total,
     unreadCount,
     page: Number(page),
@@ -31,28 +29,49 @@ const getNotifications = asyncHandler(async (req, res) => {
 });
 
 const markAsRead = asyncHandler(async (req, res) => {
-  const notification = await Notification.findOneAndUpdate(
-    { _id: req.params.id, user: req.user._id },
-    { read: true },
-    { new: true }
-  );
-  if (!notification) {
+  const notification = await prisma.notification.updateMany({
+    where: { id: req.params.id, userId: req.user.id },
+    data: { read: true },
+  });
+  if (!notification.count) {
     return res.status(404).json({ message: 'Notification not found' });
   }
-  res.json({ notification: { id: notification._id, read: notification.read } });
+  res.json({ notification: { id: req.params.id, read: true } });
 });
 
 const markAllAsRead = asyncHandler(async (req, res) => {
-  await Notification.updateMany({ user: req.user._id, read: false }, { read: true });
+  await prisma.notification.updateMany({
+    where: { userId: req.user.id, read: false },
+    data: { read: true },
+  });
   res.json({ message: 'All notifications marked as read' });
 });
 
 const deleteNotification = asyncHandler(async (req, res) => {
-  const result = await Notification.deleteOne({ _id: req.params.id, user: req.user._id });
-  if (!result.deletedCount) {
+  const result = await prisma.notification.deleteMany({
+    where: { id: req.params.id, userId: req.user.id },
+  });
+  if (!result.count) {
     return res.status(404).json({ message: 'Notification not found' });
   }
   res.json({ message: 'Notification deleted' });
 });
 
-module.exports = { getNotifications, markAsRead, markAllAsRead, deleteNotification };
+const createComplaint = asyncHandler(async (req, res) => {
+  const { subject, message } = req.body;
+  if (!subject || !message) {
+    return res.status(400).json({ message: 'Subject and message are required' });
+  }
+  const complaint = await prisma.complaint.create({
+    data: { userId: req.user.id, subject, message },
+  });
+  res.status(201).json({ complaint });
+});
+
+module.exports = {
+  getNotifications,
+  markAsRead,
+  markAllAsRead,
+  deleteNotification,
+  createComplaint,
+};

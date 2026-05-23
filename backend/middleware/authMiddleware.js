@@ -1,13 +1,59 @@
 const asyncHandler = require('express-async-handler');
-const User = require('../models/User');
-const { verifyAccessToken } = require('../services/tokenService');
+const { getSupabaseAdmin } = require('../config/supabase');
+const userRepository = require('../repositories/userRepository');
+const { toSafeUser } = require('../utils/userMapper');
+
+async function resolveUserFromToken(token) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new Error('Supabase is not configured on the server');
+  }
+
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user) {
+    return null;
+  }
+
+  const authUser = data.user;
+  let dbUser = await userRepository.findBySupabaseId(authUser.id);
+
+  if (!dbUser && authUser.email) {
+    dbUser = await userRepository.findByEmail(authUser.email);
+    if (dbUser && !dbUser.supabaseId) {
+      dbUser = await userRepository.update(dbUser.id, { supabaseId: authUser.id });
+    }
+  }
+
+  if (!dbUser) {
+    const metadata = authUser.user_metadata || {};
+    const appMeta = authUser.app_metadata || {};
+    dbUser = await userRepository.create({
+      supabaseId: authUser.id,
+      email: authUser.email.toLowerCase(),
+      name: metadata.name || authUser.email.split('@')[0],
+      phoneNumber: metadata.phoneNumber || null,
+      college: metadata.college || null,
+      academicYear: metadata.academicYear || null,
+      universityId: metadata.universityId || null,
+      profileImage: metadata.profileImage || null,
+      idCardImage: metadata.idCardImage || null,
+      universityIdImage: metadata.universityIdImage || metadata.idCardImage || null,
+      role: appMeta.role || metadata.role || 'student',
+      status: appMeta.status || metadata.status || 'pending',
+      universityIdStatus: metadata.universityIdStatus || 'pending',
+      emailVerified: Boolean(authUser.email_confirmed_at),
+    });
+  }
+
+  return dbUser;
+}
 
 const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+  if (req.headers.authorization?.startsWith('Bearer ')) {
     token = req.headers.authorization.split(' ')[1];
-  } else if (req.cookies && req.cookies.token) {
+  } else if (req.cookies?.token) {
     token = req.cookies.token;
   }
 
@@ -16,34 +62,26 @@ const protect = asyncHandler(async (req, res, next) => {
   }
 
   try {
-    const decoded = verifyAccessToken(token);
-    const user = await User.findById(decoded.id).select('-passwordHash -twoFactorSecret');
+    const user = await resolveUserFromToken(token);
     if (!user) {
-      return res.status(401).json({ message: 'User not found' });
-    }
-    const session = user.getSession(decoded.sid);
-    if (!session) {
-      return res.status(401).json({ message: 'Session invalid or expired' });
+      return res.status(401).json({ message: 'Invalid or expired token' });
     }
     if (!user.isActive) {
       return res.status(403).json({ message: 'Account is banned. Contact administration.', status: 'banned' });
     }
-    session.lastUsedAt = new Date();
-    await user.save();
-    req.user = user;
+    req.user = toSafeUser(user);
+    req.authToken = token;
     next();
   } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired token' });
+    return res.status(401).json({ message: 'Authentication failed' });
   }
 });
 
-const authorizeRoles = (...roles) => {
-  return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-    next();
-  };
+const authorizeRoles = (...roles) => (req, res, next) => {
+  if (!req.user || !roles.includes(req.user.role)) {
+    return res.status(403).json({ message: 'Access denied' });
+  }
+  next();
 };
 
 const requireApproved = (req, res, next) => {
@@ -59,4 +97,4 @@ const requireApproved = (req, res, next) => {
   next();
 };
 
-module.exports = { protect, authorizeRoles, requireApproved };
+module.exports = { protect, authorizeRoles, requireApproved, resolveUserFromToken };

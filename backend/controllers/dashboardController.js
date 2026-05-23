@@ -1,48 +1,40 @@
 const asyncHandler = require('express-async-handler');
 const QRCode = require('qrcode');
-const Booking = require('../models/Booking');
-const DEFAULT_SEAT_CAPACITY = 40;
+const bookingRepository = require('../repositories/bookingRepository');
+const { DEFAULT_SEAT_CAPACITY } = require('../services/bookingService');
 
 const getDashboard = asyncHandler(async (req, res) => {
   const user = req.user;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const upcomingBooking = await Booking.findOne({
-    user: user._id,
-    travelDate: { $gte: today },
-  })
-    .sort('travelDate')
-    .lean();
+  const upcomingBooking = await bookingRepository.findUpcomingByUser(user.id, today);
 
-  const routeDate = upcomingBooking ? new Date(upcomingBooking.travelDate).toISOString().slice(0, 10) : today.toISOString().slice(0, 10);
-  const confirmedCount = upcomingBooking
-    ? await Booking.countDocuments({ travelDate: upcomingBooking.travelDate, status: 'confirmed' })
-    : await Booking.countDocuments({ travelDate: today, status: 'confirmed' });
-  const waitingCount = upcomingBooking
-    ? await Booking.countDocuments({ travelDate: upcomingBooking.travelDate, status: 'waiting' })
-    : await Booking.countDocuments({ travelDate: today, status: 'waiting' });
+  const dateFilter = upcomingBooking?.travelDate || today;
+  const [confirmedCount, waitingCount] = await Promise.all([
+    bookingRepository.count({ travelDate: dateFilter, status: 'confirmed' }),
+    bookingRepository.count({ travelDate: dateFilter, status: 'waiting' }),
+  ]);
 
   let qrCode = null;
-
-  if (upcomingBooking && upcomingBooking.status === 'confirmed') {
+  if (upcomingBooking?.status === 'confirmed' && upcomingBooking.qrPayload) {
     qrCode = await QRCode.toDataURL(upcomingBooking.qrPayload);
   }
 
   res.json({
     user: {
-      id: user._id,
+      id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       status: user.status,
-      universityIdStatus: user.status,
+      universityIdStatus: user.universityIdStatus,
       noShowCount: user.noShowCount || 0,
       waitingListPosition: user.waitingListPosition ?? null,
     },
     upcomingBooking: upcomingBooking
       ? {
-          id: upcomingBooking._id,
+          id: upcomingBooking.id,
           pickupPoint: upcomingBooking.pickupPoint,
           destination: upcomingBooking.destination,
           route: upcomingBooking.route,

@@ -1,8 +1,12 @@
 const { logger } = require('../utils/logger');
 
-const REQUIRED_ENV_VARS = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
+const REQUIRED_ENV_VARS = ['DATABASE_URL'];
 
-const PRODUCTION_REQUIRED = ['QR_ENCRYPTION_SECRET', 'RESEND_API_KEY', 'EMAIL_FROM'];
+const PRODUCTION_REQUIRED = [
+  'QR_ENCRYPTION_SECRET',
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+];
 
 const OPTIONAL_ENV_VARS = [
   'PAYMOB_API_KEY',
@@ -11,44 +15,33 @@ const OPTIONAL_ENV_VARS = [
   'PAYMOB_IFRAME_ID',
   'FAWRY_MERCHANT_CODE',
   'FAWRY_SECURITY_KEY',
+  'STRIPE_SECRET_KEY',
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
   'CLOUDINARY_API_SECRET',
+  'REDIS_URL',
 ];
 
-const PLACEHOLDER_PATTERNS = ['replace-with', 'your-', 'changeme', 'password@cluster'];
+const PLACEHOLDER_PATTERNS = ['replace-with', 'your-', 'changeme'];
 
 function isPlaceholder(value) {
   if (!value || typeof value !== 'string') return true;
   const lower = value.toLowerCase();
-  return PLACEHOLDER_PATTERNS.some((p) => lower.includes(p)) || value.length < 32;
+  return PLACEHOLDER_PATTERNS.some((p) => lower.includes(p)) || value.length < 16;
 }
 
 function validateEnv() {
-  const missing = [];
-
-  REQUIRED_ENV_VARS.forEach((envVar) => {
-    if (!process.env[envVar] || isPlaceholder(process.env[envVar])) {
-      missing.push(envVar);
-    }
-  });
-
-  if (!process.env.DATABASE_URL) {
-    missing.push('DATABASE_URL');
-  }
+  const missing = REQUIRED_ENV_VARS.filter((envVar) => !process.env[envVar] || isPlaceholder(process.env[envVar]));
 
   if (missing.length > 0) {
-    logger.error('CRITICAL: Missing or weak environment variables', { missing });
-    console.error(`\x1b[31mCRITICAL: Set strong values for:\n  ${missing.join(', ')}\nRun: node scripts/generateSecrets.js\x1b[0m\n`);
+    logger.error('CRITICAL: Missing environment variables', { missing });
     if (process.env.NODE_ENV === 'production') {
       process.exit(1);
     }
   }
 
   if (process.env.NODE_ENV === 'production') {
-    const prodMissing = PRODUCTION_REQUIRED.filter(
-      (key) => !process.env[key] || isPlaceholder(process.env[key])
-    );
+    const prodMissing = PRODUCTION_REQUIRED.filter((key) => !process.env[key] || isPlaceholder(process.env[key]));
     if (prodMissing.length > 0) {
       logger.error('Production requires additional env vars', { prodMissing });
       process.exit(1);

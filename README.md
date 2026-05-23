@@ -1,67 +1,81 @@
-# UNI Transportation
+# UniRide
 
-A production-ready university transportation platform with a modern Next.js frontend and a Node.js + Express backend.
+Production-grade campus transportation platform — book seats, pay online, scan QR boarding passes, and manage operations from an admin dashboard.
+
+## Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js 14, TypeScript, Tailwind, Framer Motion, React Query |
+| Backend | Express, Prisma, PostgreSQL |
+| Auth | Supabase Auth (JWT) synced to Prisma users |
+| Realtime | Socket.io + Redis |
+| Payments | Paymob, Fawry, Stripe, manual screenshot verification |
+| Media | Cloudinary |
 
 ## Project structure
 
-- `backend/` - Express server, MongoDB models, authentication, booking APIs, Cloudinary upload, Redis client.
-- `frontend/` - Next.js 14 App Router, Tailwind CSS, Zustand authentication store, React Hook Form, Zod, Axios.
+```
+backend/
+  controllers/   # HTTP handlers
+  services/      # Business logic
+  repositories/  # Prisma data access
+  middleware/    # Auth, validation, uploads
+  prisma/        # Schema & migrations
+  routes/
+  jobs/
 
-## Running locally
+frontend/
+  app/           # App Router pages
+  components/    # UI & layout
+  features/      # Feature modules (extend here)
+  hooks/
+  lib/
+  messages/      # i18n (en, ar)
+```
 
-### Backend
-1. Copy `backend/.env.example` to `backend/.env`.
-2. Generate secrets: `cd backend && node scripts/generateSecrets.js`
-3. Configure MongoDB, JWT secrets, Resend, Cloudinary, Redis, and frontend URL.
-3. Install dependencies:
-   ```bash
-   cd backend
-   npm install
-   ```
-4. Run the backend server:
-   ```bash
-   npm run dev
-   ```
+## Quick start
 
-### Frontend
-1. Copy `frontend/.env.example` to `frontend/.env.local`.
-2. Set `NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api`.
-3. Install dependencies:
-   ```bash
-   cd frontend
-   npm install
-   ```
-4. Run the frontend:
-   ```bash
-   npm run dev
-   ```
+### 1. Database & Redis
 
-## Production deployment
+```bash
+docker compose up -d postgres redis
+```
 
-See **[PRODUCTION_SETUP.md](./PRODUCTION_SETUP.md)** and **[DEPLOYMENT.md](./DEPLOYMENT.md)** for Render, Vercel, MongoDB Atlas, and environment configuration.
+### 2. Backend
 
-**Never commit real API keys or database passwords.** Set secrets only in your hosting dashboard.
+```bash
+cd backend
+cp .env.example .env
+# Set DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, QR_ENCRYPTION_SECRET
+npm install
+npx prisma migrate deploy
+npm run seed:admin
+npm run dev
+```
 
-## Phase 1 completed
-- Backend auth system
-- MongoDB connection
-- JWT authentication
-- University ID upload flow
-- Cloudinary image upload
+### 3. Frontend
 
-## Phase 2 progress
-- Next.js frontend scaffold
-- Authentication pages
-- Student dashboard
-- Booking pages
-- Profile and QR pages
-- Toast notifications and protected routing
+```bash
+cd frontend
+cp .env.local.example .env.local
+# Set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, NEXT_PUBLIC_API_URL
+npm install
+npm run dev
+```
 
-## Security and deployment hardening
-- Cookie-based JWT auth with refresh token rotation and secure HttpOnly cookies
-- CSRF protection plus XSS and NoSQL injection sanitization
-- Redis-backed rate limiting, IP throttling, login lockout, and brute force protections
-- Sentry request error tracking and centralized Winston logging
-- Version mismatch detection for frontend/backend deployment skew protection
-- Cloudinary upload restrictions and MIME validation
-- Health, keep-alive, and readiness endpoints for production stability
+## Deployment
+
+- **Backend (Render):** see `render.yaml` — requires `DATABASE_URL` (PostgreSQL) and Supabase service role key.
+- **Frontend (Vercel):** set `NEXT_PUBLIC_API_URL` to your Render API URL.
+
+## API highlights
+
+- `GET /api/bookings/public/trips` — public trip listing (homepage)
+- `POST /api/auth/sync` — sync Supabase user to PostgreSQL
+- `GET /api/auth/me` — profile (Supabase JWT required)
+- Admin: users, trips, routes, buses, payments, complaints, analytics
+
+## Security
+
+Helmet, rate limiting, CSRF, XSS sanitization, encrypted QR payloads, Supabase JWT verification, audit logging.

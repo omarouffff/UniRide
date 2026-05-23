@@ -38,7 +38,7 @@ function normalizeMetadata(metadata: unknown): SupabaseUserMetadata {
     profileImage: typed.profileImage,
     idCardImage: typed.idCardImage,
     noShowCount: typed.noShowCount ?? 0,
-    waitingListPosition: typed.waitingListPosition ?? null,
+    waitingListPosition: typed.waitingListPosition ?? undefined,
   };
 }
 

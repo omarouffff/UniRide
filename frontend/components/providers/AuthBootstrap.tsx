@@ -4,16 +4,21 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import api, { refreshCsrfToken } from '@/lib/api';
 import { logApiConfig } from '@/lib/apiConfig';
 import { useAuthStore } from '@/store/useAuthStore';
-import { createBrowserClient } from '@supabase/ssr';
-import { mapSupabaseUserToProfile, signInWithEmail, signOutSupabase, signUpWithEmail, getBrowserSupabaseSession } from '@/lib/supabaseAuth';
-import { saveAuthTokens } from '@/lib/auth';
+import { getBrowserSupabase } from '@/lib/supabaseClient';
+import {
+  mapSupabaseUserToProfile,
+  signInWithEmail,
+  signOutSupabase,
+  signUpWithEmail,
+  getBrowserSupabaseSession,
+} from '@/lib/supabaseAuth';
 import type { UserProfile } from '@/types/user';
 
 type AuthContextValue = {
   user: UserProfile | null;
   loading: boolean;
   sessionActive: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<UserProfile | null>;
   signUp: (payload: {
     name: string;
     email: string;
@@ -36,6 +41,16 @@ export function useAuthContext() {
   return context;
 }
 
+async function hydrateProfile() {
+  try {
+    const response = await api.get('/auth/me');
+    return response.data.user as UserProfile;
+  } catch {
+    const session = await getBrowserSupabaseSession();
+    return mapSupabaseUserToProfile(session.data?.session?.user ?? null);
+  }
+}
+
 export default function AuthBootstrap({ children }: { children: ReactNode }) {
   const user = useAuthStore((state) => state.user);
   const loading = useAuthStore((state) => state.loading);
@@ -51,27 +66,21 @@ export default function AuthBootstrap({ children }: { children: ReactNode }) {
     const bootstrap = async () => {
       logApiConfig('bootstrap');
       setLoading(true);
-
       try {
-        const result = await getBrowserSupabaseSession();
-        const supabaseSession = result.data?.session;
-        const supabaseUser = mapSupabaseUserToProfile(supabaseSession?.user ?? null);
-
         await refreshCsrfToken();
-
-        try {
-          const response = await api.get('/auth/me');
+        const session = await getBrowserSupabaseSession();
+        if (session.data?.session) {
+          const profile = await hydrateProfile();
           if (active) {
-            setUser(response.data.user);
-            setSessionActive(Boolean(supabaseSession));
+            setUser(profile);
+            setSessionActive(true);
+            await api.post('/auth/sync').catch(() => undefined);
           }
-        } catch {
-          if (active) {
-            setUser(supabaseUser);
-            setSessionActive(Boolean(supabaseSession));
-          }
+        } else if (active) {
+          setUser(null);
+          setSessionActive(false);
         }
-      } catch (error) {
+      } catch {
         if (active) {
           setUser(null);
           setSessionActive(false);
@@ -84,17 +93,15 @@ export default function AuthBootstrap({ children }: { children: ReactNode }) {
       }
     };
 
-    const subscribeAuthState = async () => {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-      );
-      const { data } = await supabase.auth.onAuthStateChange((_event, session) => {
+    const subscribeAuthState = () => {
+      const supabase = getBrowserSupabase();
+      const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (!active) return;
-        const profile = mapSupabaseUserToProfile(session?.user ?? null);
         if (session?.user) {
+          const profile = await hydrateProfile();
           setUser(profile);
           setSessionActive(true);
+          await api.post('/auth/sync').catch(() => undefined);
         } else {
           setUser(null);
           setSessionActive(false);
@@ -114,16 +121,13 @@ export default function AuthBootstrap({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const supabaseResult = await signInWithEmail(email, password);
-    if (supabaseResult.error) {
-      throw supabaseResult.error;
-    }
-
+    if (supabaseResult.error) throw supabaseResult.error;
     await refreshCsrfToken();
-    const response = await api.post('/auth/login', { email, password });
-    saveAuthTokens(response.data.accessToken, response.data.refreshToken);
-    setUser(response.data.user);
+    const profile = await hydrateProfile();
+    setUser(profile);
     setSessionActive(true);
-    return response.data.user;
+    await api.post('/auth/sync').catch(() => undefined);
+    return profile;
   };
 
   const signUp = async (payload: {
@@ -135,26 +139,21 @@ export default function AuthBootstrap({ children }: { children: ReactNode }) {
     academicYear: string;
     universityId: string;
   }) => {
-    const response = await api.post('/auth/register', payload);
     const supabaseResult = await signUpWithEmail(payload);
-    if (supabaseResult.error) {
-      throw supabaseResult.error;
-    }
+    if (supabaseResult.error) throw supabaseResult.error;
     setUser(null);
     setSessionActive(Boolean(supabaseResult.data?.session));
-    return response.data;
   };
 
   const signOut = async () => {
     await signOutSupabase().catch(() => undefined);
-    await api.post('/auth/logout').catch(() => undefined);
     setUser(null);
     setSessionActive(false);
   };
 
   const value = useMemo(
     () => ({ user, loading, sessionActive, signIn, signUp, signOut }),
-    [user, loading, sessionActive, signIn, signUp, signOut]
+    [user, loading, sessionActive]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

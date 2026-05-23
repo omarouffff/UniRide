@@ -4,8 +4,8 @@ services:
     runtime: node
     rootDir: backend
     plan: free
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: npm install && npx prisma generate
+    startCommand: npm run db:migrate && npm start
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
@@ -13,22 +13,18 @@ services:
         value: production
       - key: PORT
         value: 5000
-      - key: MONGODB_URI
+      - key: DATABASE_URL
         sync: false
-      - key: MONGO_URI
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: REDIS_URL
-        sync: false
-      - key: JWT_SECRET
-        sync: false
-      - key: JWT_REFRESH_SECRET
         sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
         sync: false
-      - key: JWT_EXPIRES_IN
-        value: 7d
       - key: QR_ENCRYPTION_SECRET
         sync: false
       - key: CLOUDINARY_CLOUD_NAME
@@ -45,17 +41,15 @@ services:
         value: "true"
       - key: PAYMOB_API_KEY
         sync: false
+      - key: PAYMOB_HMAC_SECRET
+        sync: false
+      - key: PAYMOB_INTEGRATION_ID
+        sync: false
+      - key: PAYMOB_IFRAME_ID
+        sync: false
       - key: FAWRY_MERCHANT_CODE
         sync: false
       - key: FAWRY_SECURITY_KEY
         sync: false
-      - key: EMAIL_USER
-        sync: false
-      - key: EMAIL_PASS
-        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
-      - key: RATE_LIMIT_WINDOW_MS
-        value: "900000"
-      - key: RATE_LIMIT_MAX_REQUESTS
-        value: "100"

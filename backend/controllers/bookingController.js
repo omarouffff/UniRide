@@ -1,8 +1,10 @@
 const asyncHandler = require('express-async-handler');
-const Booking = require('../models/Booking');
-const Trip = require('../models/Trip');
+const bookingRepository = require('../repositories/bookingRepository');
+const tripRepository = require('../repositories/tripRepository');
 const { allocateBooking } = require('../services/bookingService');
 const { getRouteRoomName } = require('../utils/socketRooms');
+const { prisma } = require('../prisma/client');
+const { encryptQrPayload } = require('../utils/qrPayload');
 
 const createBooking = asyncHandler(async (req, res) => {
   const { pickupPoint, destination, travelDate, tripId } = req.body;
@@ -10,15 +12,15 @@ const createBooking = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Trip or manual booking fields are required' });
   }
 
-  const duplicateFilter = { user: req.user._id, status: { $ne: 'cancelled' } };
-  if (tripId) duplicateFilter.trip = tripId;
-  const duplicate = await Booking.findOne(duplicateFilter);
+  const duplicate = tripId
+    ? await bookingRepository.findActiveByUserAndTrip(req.user.id, tripId)
+    : null;
   if (duplicate) {
     return res.status(409).json({ message: 'You already have an active booking for this trip' });
   }
 
   const booking = await allocateBooking({
-    user: req.user._id,
+    userId: req.user.id,
     pickupPoint,
     destination,
     travelDate,
@@ -27,7 +29,7 @@ const createBooking = asyncHandler(async (req, res) => {
 
   const io = req.app.get('io');
   const bookingPayload = {
-    id: booking._id,
+    id: booking.id,
     trip: booking.trip,
     pickupPoint: booking.pickupPoint,
     destination: booking.destination,
@@ -39,18 +41,20 @@ const createBooking = asyncHandler(async (req, res) => {
   };
 
   if (io) {
-    io.to(req.user._id.toString()).emit('bookingUpdate', bookingPayload);
+    io.to(req.user.id).emit('bookingUpdate', bookingPayload);
 
-    const filter = booking.trip ? { trip: booking.trip } : { travelDate: booking.travelDate };
-    const trip = booking.trip ? await Trip.findById(booking.trip) : null;
+    const trip = booking.tripId ? await tripRepository.findById(booking.tripId) : null;
     const capacity = trip?.capacity || 40;
-    const confirmedCount = await Booking.countDocuments({ ...filter, status: 'confirmed' });
-    const waitingCount = await Booking.countDocuments({ ...filter, status: 'waiting' });
+    const filter = booking.tripId ? { tripId: booking.tripId } : { travelDate: booking.travelDate };
+    const [confirmedCount, waitingCount] = await Promise.all([
+      bookingRepository.count({ ...filter, status: 'confirmed' }),
+      bookingRepository.count({ ...filter, status: 'waiting' }),
+    ]);
     const routeRoom = getRouteRoomName(booking.route, booking.travelDate);
 
     if (routeRoom) {
       io.to(routeRoom).emit('routeUpdate', {
-        tripId: booking.trip,
+        tripId: booking.tripId,
         availableSeats: Math.max(0, capacity - confirmedCount),
         confirmedCount,
         waitingCount,
@@ -62,18 +66,15 @@ const createBooking = asyncHandler(async (req, res) => {
 });
 
 const getAvailableTrips = asyncHandler(async (req, res) => {
-  const now = new Date();
-  const trips = await Trip.find({ isActive: true, departureTime: { $gte: now } }).sort({ departureTime: 1 }).lean();
+  const trips = await tripRepository.findActiveUpcoming();
   const enrichedTrips = await Promise.all(
     trips.map(async (trip) => {
       const [confirmedCount, waitingCount] = await Promise.all([
-        Booking.countDocuments({ trip: trip._id, status: 'confirmed' }),
-        Booking.countDocuments({ trip: trip._id, status: 'waiting' }),
+        bookingRepository.count({ tripId: trip.id, status: 'confirmed' }),
+        bookingRepository.count({ tripId: trip.id, status: 'waiting' }),
       ]);
-
       return {
         ...trip,
-        id: trip._id,
         route: `${trip.pickupPoint} -> ${trip.destination}`,
         confirmedCount,
         waitingCount,
@@ -81,17 +82,16 @@ const getAvailableTrips = asyncHandler(async (req, res) => {
       };
     })
   );
-
   res.json({ trips: enrichedTrips });
 });
 
 const getMyBookings = asyncHandler(async (req, res) => {
-  const bookings = await Booking.find({ user: req.user._id }).populate('trip').sort('-travelDate');
+  const bookings = await bookingRepository.findManyByUser(req.user.id);
   res.json({ bookings });
 });
 
 const getBookingById = asyncHandler(async (req, res) => {
-  const booking = await Booking.findOne({ _id: req.params.id, user: req.user._id }).populate('trip');
+  const booking = await bookingRepository.findByUserAndId(req.user.id, req.params.id);
   if (!booking) {
     return res.status(404).json({ message: 'Booking not found' });
   }
@@ -99,7 +99,7 @@ const getBookingById = asyncHandler(async (req, res) => {
 });
 
 const cancelBooking = asyncHandler(async (req, res) => {
-  const booking = await Booking.findOne({ _id: req.params.id, user: req.user._id });
+  const booking = await bookingRepository.findByUserAndId(req.user.id, req.params.id);
   if (!booking) {
     return res.status(404).json({ message: 'Booking not found' });
   }
@@ -112,45 +112,65 @@ const cancelBooking = asyncHandler(async (req, res) => {
   const wasConfirmed = booking.status === 'confirmed';
   const cancelledPosition = booking.waitingPosition;
 
-  booking.status = 'cancelled';
-  booking.cancelledAt = new Date();
-  booking.waitingPosition = null;
-  await booking.save();
+  const updated = await prisma.$transaction(async (tx) => {
+    const cancelled = await tx.booking.update({
+      where: { id: booking.id },
+      data: {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        waitingPosition: null,
+      },
+    });
 
-  if (wasConfirmed) {
-    const firstWaiting = await Booking.findOne({ trip: booking.trip, status: 'waiting' }).sort({ createdAt: 1 });
-    if (firstWaiting) {
-      firstWaiting.status = 'confirmed';
-      firstWaiting.seat = booking.seat;
-      firstWaiting.waitingPosition = null;
-      
-      const { encryptQrPayload } = require('../utils/qrPayload');
-      firstWaiting.qrPayload = encryptQrPayload({
-        bookingId: firstWaiting._id,
-        userId: firstWaiting.user,
-        tripId: firstWaiting.trip,
-        seat: firstWaiting.seat,
+    if (wasConfirmed && booking.tripId) {
+      const firstWaiting = await tx.booking.findFirst({
+        where: { tripId: booking.tripId, status: 'waiting' },
+        orderBy: { createdAt: 'asc' },
       });
-      await firstWaiting.save();
 
-      // Shift other waitlisted bookings up
-      await Booking.updateMany(
-        { trip: booking.trip, status: 'waiting' },
-        { $inc: { waitingPosition: -1 } }
-      );
-    } else if (booking.trip) {
-      // Decrement confirmedCount atomically since no waitlist filled the seat
-      await Trip.findByIdAndUpdate(booking.trip, { $inc: { confirmedCount: -1 } });
+      if (firstWaiting) {
+        const qrPayload = encryptQrPayload({
+          bookingId: firstWaiting.id,
+          userId: firstWaiting.userId,
+          tripId: firstWaiting.tripId,
+          seat: booking.seat,
+        });
+        await tx.booking.update({
+          where: { id: firstWaiting.id },
+          data: {
+            status: 'confirmed',
+            seat: booking.seat,
+            waitingPosition: null,
+            qrPayload,
+          },
+        });
+        await tx.booking.updateMany({
+          where: { tripId: booking.tripId, status: 'waiting' },
+          data: { waitingPosition: { decrement: 1 } },
+        });
+        await tx.waitingList.deleteMany({ where: { bookingId: firstWaiting.id } });
+      } else {
+        await tx.trip.updateMany({
+          where: { id: booking.tripId, confirmedCount: { gt: 0 } },
+          data: { confirmedCount: { decrement: 1 } },
+        });
+      }
+    } else if (cancelledPosition && booking.tripId) {
+      await tx.booking.updateMany({
+        where: {
+          tripId: booking.tripId,
+          status: 'waiting',
+          waitingPosition: { gt: cancelledPosition },
+        },
+        data: { waitingPosition: { decrement: 1 } },
+      });
+      await tx.waitingList.deleteMany({ where: { bookingId: booking.id } });
     }
-  } else if (cancelledPosition) {
-    // Shift other waitlisted bookings up
-    await Booking.updateMany(
-      { trip: booking.trip, status: 'waiting', waitingPosition: { $gt: cancelledPosition } },
-      { $inc: { waitingPosition: -1 } }
-    );
-  }
 
-  res.json({ booking });
+    return cancelled;
+  });
+
+  res.json({ booking: updated });
 });
 
 module.exports = { createBooking, getAvailableTrips, getMyBookings, getBookingById, cancelBooking };

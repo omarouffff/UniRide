@@ -107,7 +107,7 @@ export default function DashboardPage() {
                 </div>
                 {currentStatus === 'approved' && (
                   <div className="mt-6 flex flex-wrap gap-3">
-                    <Link href="/booking" className={buttonVariants({ size: 'sm' })}>
+                    <Link href="/bookings/new" className={buttonVariants({ size: 'sm' })}>
                       <Plus className="w-4 h-4 mr-2" />
                       Book Trip
                     </Link>
@@ -206,7 +206,7 @@ export default function DashboardPage() {
                 ) : (
                   <div className="text-center py-8">
                     <p className="text-slate-400 mb-4">No upcoming trips yet</p>
-                    <Link href="/booking" className={buttonVariants({ size: 'sm' })}>
+                    <Link href="/bookings/new" className={buttonVariants({ size: 'sm' })}>
                       <Plus className="w-4 h-4 mr-2" />
                       Book Your First Trip
                     </Link>
@@ -221,7 +221,7 @@ export default function DashboardPage() {
               className="grid grid-cols-1 md:grid-cols-2 gap-6"
             >
               <Link
-                href="/booking"
+                href="/bookings/new"
                 className="group p-6 rounded-lg border border-white/10 bg-gradient-to-br from-cyan-500/20 to-blue-500/10 hover:border-cyan-400/50 transition-all"
               >
                 <div className="flex items-start justify-between">

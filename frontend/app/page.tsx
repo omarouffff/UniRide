@@ -1,197 +1,265 @@
-﻿'use client'
+﻿'use client';
 
-import Link from 'next/link'
-import { FormEvent, useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { buttonVariants } from '@/components/ui/button'
-import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher'
-import { useAuthStore } from '@/store/useAuthStore'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import { ArrowRight, MapPin, Clock, Users, QrCode, Radio } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useRouter } from 'next/navigation';
+import api from '@/lib/api';
+import { buttonVariants } from '@/components/ui/button';
+import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
+import { MobileNav } from '@/components/layout/MobileNav';
+import { TripCardSkeleton } from '@/components/ui/shimmer';
+import { useAuthStore } from '@/store/useAuthStore';
+import { format } from 'date-fns';
 
-const PICKUP_OPTIONS = ['Central Library', 'North Gate', 'Sports Hub', 'Campus Gate']
-const DESTINATION_OPTIONS = ['Engineering Block', 'Business School', 'Student Residence', 'Main Gate']
-const TIME_OPTIONS = ['08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM']
-const AVAILABLE_RIDES = [
-  { route: 'Library → Engineering Block', seats: 4, eta: '5 min', price: '₤ 9.50' },
-  { route: 'North Gate → Business School', seats: 3, eta: '7 min', price: '₤ 8.00' },
-  { route: 'Campus Gate → Main Hall', seats: 5, eta: '4 min', price: '₤ 7.20' },
-]
+interface TripOption {
+  id: string;
+  title: string;
+  pickupPoint: string;
+  destination: string;
+  departureTime: string;
+  capacity: number;
+  confirmedCount: number;
+  availableSeats: number;
+  busNumber: string;
+}
 
-export default function LandingPage() {
-  const { t } = useTranslation()
-  const router = useRouter()
-  const user = useAuthStore((state) => state.user)
-  const [pickup, setPickup] = useState(PICKUP_OPTIONS[0])
-  const [destination, setDestination] = useState(DESTINATION_OPTIONS[0])
-  const [time, setTime] = useState(TIME_OPTIONS[1])
+interface ActiveBooking {
+  id: string;
+  route: string;
+  status: string;
+  seat?: string | null;
+  travelDate: string;
+}
+
+export default function HomePage() {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const user = useAuthStore((state) => state.user);
+  const [trips, setTrips] = useState<TripOption[]>([]);
+  const [loadingTrips, setLoadingTrips] = useState(true);
+  const [pickup, setPickup] = useState('');
+  const [destination, setDestination] = useState('');
+  const [selectedTripId, setSelectedTripId] = useState('');
+  const [activeBooking, setActiveBooking] = useState<ActiveBooking | null>(null);
 
   useEffect(() => {
-    if (user) {
-      router.replace('/dashboard')
-    }
-  }, [user, router])
+    let active = true;
+    api
+      .get('/bookings/public/trips')
+      .then((res) => {
+        if (!active) return;
+        const list: TripOption[] = res.data.trips || [];
+        setTrips(list);
+        if (list[0]) {
+          setPickup(list[0].pickupPoint);
+          setDestination(list[0].destination);
+          setSelectedTripId(list[0].id);
+        }
+      })
+      .finally(() => active && setLoadingTrips(false));
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  const handleBookSeat = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    router.push('/bookings/new')
-  }
+  useEffect(() => {
+    if (!user || user.status !== 'approved') return;
+    let active = true;
+    api
+      .get('/bookings/dashboard')
+      .then((res) => {
+        if (!active) return;
+        const upcoming = res.data.upcomingBooking;
+        if (upcoming) {
+          setActiveBooking({
+            id: upcoming.id,
+            route: upcoming.route,
+            status: upcoming.status,
+            seat: upcoming.seat,
+            travelDate: upcoming.travelDate,
+          });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
+  const filteredTrips = useMemo(() => {
+    return trips.filter((trip) => {
+      const pickupMatch = !pickup || trip.pickupPoint.toLowerCase().includes(pickup.toLowerCase());
+      const destMatch = !destination || trip.destination.toLowerCase().includes(destination.toLowerCase());
+      return pickupMatch && destMatch;
+    });
+  }, [trips, pickup, destination]);
+
+  const pickupOptions = useMemo(() => [...new Set(trips.map((t) => t.pickupPoint))], [trips]);
+  const destinationOptions = useMemo(() => [...new Set(trips.map((t) => t.destination))], [trips]);
+
+  const handleBook = () => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    const tripId = selectedTripId || filteredTrips[0]?.id;
+    router.push(tripId ? `/bookings/new?tripId=${tripId}` : '/bookings/new');
+  };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <nav className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-slate-950 text-white pb-24 sm:pb-0">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/85 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-400 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-500/20">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-400 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-500/25">
               UR
             </div>
             <div>
-              <p className="text-sm font-semibold text-white">UniRide</p>
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Book a Seat</p>
+              <p className="text-sm font-semibold">UniRide</p>
+              <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400">Move faster</p>
             </div>
           </div>
-          <div className="hidden items-center gap-4 sm:flex">
+          <div className="flex items-center gap-3">
             <LanguageSwitcher />
-            <Link href="/login" className="text-sm text-slate-300 transition hover:text-cyan-300">
-              {t('auth.login')}
-            </Link>
-            <Link href="/register" className={buttonVariants({ size: 'sm' })}>
-              {t('auth.register')}
-            </Link>
+            {user ? (
+              <Link href="/dashboard" className={buttonVariants({ size: 'sm' })}>
+                {t('nav.dashboard')}
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" className="text-sm text-slate-300 hover:text-cyan-300">
+                  {t('auth.login')}
+                </Link>
+                <Link href="/register" className={buttonVariants({ size: 'sm' })}>
+                  {t('auth.register')}
+                </Link>
+              </>
+            )}
           </div>
         </div>
-      </nav>
+      </header>
 
-      <section className="relative pt-24 pb-16 px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-6xl">
+      <section className="mx-auto max-w-6xl px-4 py-8">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center">
+          <p className="text-xs uppercase tracking-[0.3em] text-cyan-300">{t('home.availableRides')}</p>
+          <h1 className="mt-3 text-3xl font-semibold sm:text-5xl">{t('home.headline')}</h1>
+          <p className="mx-auto mt-3 max-w-xl text-slate-400">{t('home.subtext')}</p>
+        </motion.div>
+
+        {activeBooking && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-center"
+            className="mt-8 rounded-3xl border border-cyan-500/30 bg-cyan-500/10 p-4"
           >
-            <p className="text-sm uppercase tracking-[0.3em] text-cyan-300">{t('home.availableRides')}</p>
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-              {t('home.headline')}
-            </h1>
-            <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-400 sm:text-lg">
-              {t('home.subtext')}
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-cyan-200">Active booking</p>
+                <p className="font-semibold">{activeBooking.route}</p>
+                <p className="text-sm text-slate-300">
+                  {format(new Date(activeBooking.travelDate), 'PPp')} · {activeBooking.status}
+                  {activeBooking.seat ? ` · Seat ${activeBooking.seat}` : ''}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Link href="/qr" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                  <QrCode className="mr-1 h-4 w-4" /> QR
+                </Link>
+                <Link href="/my-trips" className={buttonVariants({ size: 'sm' })}>
+                  <Radio className="mr-1 h-4 w-4" /> Live
+                </Link>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr]">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="rounded-[2rem] border border-white/10 bg-slate-900/90 p-6 shadow-xl shadow-slate-950/40"
+          >
+            <h2 className="text-lg font-semibold">{t('home.bookSeat')}</h2>
+            <div className="mt-5 space-y-4">
+              <label className="block space-y-2 text-sm">
+                <span className="text-slate-300 flex items-center gap-2"><MapPin className="h-4 w-4" />{t('home.pickup')}</span>
+                <select
+                  value={pickup}
+                  onChange={(e) => setPickup(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-400/60"
+                >
+                  {pickupOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block space-y-2 text-sm">
+                <span className="text-slate-300 flex items-center gap-2"><MapPin className="h-4 w-4" />{t('home.destination')}</span>
+                <select
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-400/60"
+                >
+                  {destinationOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" onClick={handleBook} className={`${buttonVariants({ size: 'lg' })} w-full mt-2`}>
+                <ArrowRight className="mr-2 h-4 w-4" />
+                {t('home.bookSeat')}
+              </button>
+            </div>
           </motion.div>
 
-          <div className="mt-12 grid gap-8 lg:grid-cols-[1fr_0.95fr]">
-            <motion.form
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              onSubmit={handleBookSeat}
-              className="rounded-[2rem] border border-white/10 bg-slate-900/90 p-6 shadow-lg shadow-slate-950/30 backdrop-blur-xl"
-            >
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-300">{t('home.pickup')}</label>
-                  <select
-                    value={pickup}
-                    onChange={(event) => setPickup(event.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950/90 px-4 py-3 text-white outline-none ring-1 ring-slate-800 transition focus:ring-cyan-400"
-                  >
-                    {PICKUP_OPTIONS.map((option) => (
-                      <option key={option} value={option} className="bg-slate-950 text-white">
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-300">{t('home.destination')}</label>
-                  <select
-                    value={destination}
-                    onChange={(event) => setDestination(event.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950/90 px-4 py-3 text-white outline-none ring-1 ring-slate-800 transition focus:ring-cyan-400"
-                  >
-                    {DESTINATION_OPTIONS.map((option) => (
-                      <option key={option} value={option} className="bg-slate-950 text-white">
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-300">{t('home.time')}</label>
-                  <select
-                    value={time}
-                    onChange={(event) => setTime(event.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950/90 px-4 py-3 text-white outline-none ring-1 ring-slate-800 transition focus:ring-cyan-400"
-                  >
-                    {TIME_OPTIONS.map((option) => (
-                      <option key={option} value={option} className="bg-slate-950 text-white">
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="rounded-[2rem] border border-white/10 bg-slate-900/90 p-6 shadow-xl shadow-slate-950/40"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">{t('home.fastRoutesReady')}</h2>
+              <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-300">{t('home.live')}</span>
+            </div>
+            <div className="mt-5 space-y-3 max-h-[420px] overflow-y-auto pr-1">
+              {loadingTrips &&
+                Array.from({ length: 3 }).map((_, i) => <TripCardSkeleton key={i} />)}
+              {!loadingTrips && filteredTrips.length === 0 && (
+                <p className="text-sm text-slate-400">No trips match your route. Check back soon.</p>
+              )}
+              {filteredTrips.map((trip) => (
                 <button
-                  type="submit"
-                  className={`${buttonVariants({ size: 'lg' })} w-full justify-center py-4 text-base font-semibold`}
+                  key={trip.id}
+                  type="button"
+                  onClick={() => setSelectedTripId(trip.id)}
+                  className={`w-full rounded-3xl border p-4 text-left transition ${
+                    selectedTripId === trip.id
+                      ? 'border-cyan-400/50 bg-cyan-500/10'
+                      : 'border-white/10 bg-slate-950/70 hover:border-white/20'
+                  }`}
                 >
-                  <ArrowRight className="mr-2 h-4 w-4" />
-                  {t('home.bookSeat')}
-                </button>
-              </div>
-            </motion.form>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="rounded-[2rem] border border-white/10 bg-slate-900/90 p-6 shadow-lg shadow-slate-950/30 backdrop-blur-xl"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-300">Available rides</p>
-                  <p className="mt-1 text-lg font-semibold text-white">Fast routes ready now</p>
-                </div>
-                <div className="rounded-full bg-cyan-500/10 px-3 py-1 text-xs uppercase tracking-[0.3em] text-cyan-200">
-                  Live
-                </div>
-              </div>
-
-              <div className="mt-6 space-y-4">
-                {AVAILABLE_RIDES.map((ride) => (
-                  <div key={ride.route} className="rounded-3xl border border-white/10 bg-slate-950/80 p-4 transition hover:border-cyan-400/30 hover:bg-slate-900/95">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="font-semibold text-white">{ride.route}</p>
-                        <p className="mt-1 text-sm text-slate-400">{ride.eta} • {ride.seats} seats left</p>
-                      </div>
-                      <p className="text-base font-semibold text-cyan-300">{ride.price}</p>
-                    </div>
+                  <p className="font-semibold">{trip.pickupPoint} → {trip.destination}</p>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-400">
+                    <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{format(new Date(trip.departureTime), 'p')}</span>
+                    <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" />{trip.availableSeats} seats</span>
+                    <span>Bus {trip.busNumber}</span>
                   </div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
+                </button>
+              ))}
+            </div>
+          </motion.div>
         </div>
       </section>
 
-      <footer className="border-t border-white/10 bg-slate-950/80 py-8 px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-6xl text-center text-sm text-slate-500">
-          UniRide · Simple campus ride booking · © 2026
-        </div>
+      <footer className="hidden sm:block border-t border-white/10 py-8 text-center text-sm text-slate-500">
+        {t('home.footer')}
       </footer>
-
-      <div className="fixed bottom-0 left-0 right-0 z-40 sm:hidden border-t border-white/10 bg-slate-950/95 backdrop-blur-xl px-4 py-3">
-        <div className="grid grid-cols-4 gap-2 text-center text-xs text-slate-300">
-          <button className="rounded-3xl bg-slate-900/80 px-3 py-3 transition hover:bg-slate-800">Home</button>
-          <button className="rounded-3xl bg-slate-900/80 px-3 py-3 transition hover:bg-slate-800">My Trips</button>
-          <button className="rounded-3xl bg-slate-900/80 px-3 py-3 transition hover:bg-slate-800">QR</button>
-          <button className="rounded-3xl bg-slate-900/80 px-3 py-3 transition hover:bg-slate-800">Profile</button>
-        </div>
-      </div>
+      <MobileNav />
     </main>
-  )
+  );
 }

@@ -1,43 +1,34 @@
-const Booking = require('../models/Booking');
-const Trip = require('../models/Trip');
-const User = require('../models/User');
+const { prisma } = require('../prisma/client');
 const { logger } = require('../utils/logger');
 
-/**
- * Marks confirmed passengers as no-show if trip departed 2+ hours ago and they were not boarded.
- */
 async function processNoShows() {
-  const cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
-  const departedTrips = await Trip.find({
-    isActive: true,
-    departureTime: { $lte: cutoff },
-  }).select('_id');
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000);
 
-  const tripIds = departedTrips.map((t) => t._id);
-  if (!tripIds.length) return { processed: 0 };
-
-  const bookings = await Booking.find({
-    trip: { $in: tripIds },
-    status: 'confirmed',
-    boardedAt: { $exists: false },
-    noShow: { $ne: true },
+  const overdue = await prisma.booking.findMany({
+    where: {
+      status: 'confirmed',
+      boardedAt: null,
+      travelDate: { lte: cutoff },
+    },
+    take: 100,
   });
 
-  let processed = 0;
-  for (const booking of bookings) {
-    booking.noShow = true;
-    booking.status = 'cancelled';
-    booking.cancelledAt = new Date();
-    await booking.save();
-    await User.findByIdAndUpdate(booking.user, { $inc: { noShowCount: 1 } });
-    processed += 1;
+  for (const booking of overdue) {
+    await prisma.$transaction([
+      prisma.booking.update({
+        where: { id: booking.id },
+        data: { noShow: true, status: 'cancelled', cancelledAt: new Date() },
+      }),
+      prisma.user.update({
+        where: { id: booking.userId },
+        data: { noShowCount: { increment: 1 } },
+      }),
+    ]);
   }
 
-  if (processed > 0) {
-    logger.info('No-show cron processed bookings', { processed });
+  if (overdue.length > 0) {
+    logger.info('No-show cron processed bookings', { count: overdue.length });
   }
-
-  return { processed };
 }
 
 module.exports = { processNoShows };

@@ -54,13 +54,10 @@ export default function LoginPage() {
       }
 
       const user = await auth.signIn(values.email, values.password);
-
-      if (isDev) {
-        console.log('[login] response', {
-          user,
-          hasAccessToken: Boolean(user),
-        });
+      if (!user) {
+        throw new Error('Sign in failed');
       }
+
       toast({
         variant: 'success',
         title: t('auth.login'),

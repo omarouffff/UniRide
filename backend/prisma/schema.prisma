@@ -8,46 +8,51 @@ datasource db {
 }
 
 model User {
-  id                        String    @id @default(uuid())
-  name                      String
-  email                     String    @unique
-  phoneNumber               String?
-  college                   String?
-  academicYear              String?
-  profileImage              String?
-  passwordHash              String
-  role                      UserRole  @default(student)
-  status                    UserStatus @default(pending)
-  universityId              String?
-  idCardImage               String?
-  universityIdImage         String?
-  universityIdStatus        UniversityVerificationStatus @default(pending)
-  reviewedAt                DateTime?
-  reviewNotes               String?
-  noShowCount               Int       @default(0)
-  waitingListPosition       Int?
-  isActive                  Boolean   @default(true)
-  emailVerified             Boolean   @default(false)
-  emailVerificationToken    String?
-  emailVerificationExpires  DateTime?
+  id                          String                       @id @default(uuid())
+  supabaseId                  String?                      @unique
+  name                        String
+  email                       String                       @unique
+  phoneNumber                 String?
+  college                     String?
+  academicYear                String?
+  profileImage                String?
+  passwordHash                String?
+  role                        UserRole                     @default(student)
+  status                      UserStatus                   @default(pending)
+  universityId                String?
+  idCardImage                 String?
+  universityIdImage           String?
+  universityIdStatus          UniversityVerificationStatus @default(pending)
+  reviewedAt                  DateTime?
+  reviewNotes                 String?
+  noShowCount                 Int                          @default(0)
+  waitingListPosition         Int?
+  isActive                    Boolean                      @default(true)
+  emailVerified               Boolean                      @default(false)
+  emailVerificationToken      String?
+  emailVerificationExpires    DateTime?
   emailVerificationLastSentAt DateTime?
-  passwordResetToken        String?
-  passwordResetExpires      DateTime?
-  twoFactorEnabled          Boolean   @default(false)
-  twoFactorSecret           String?
-  failedLoginAttempts       Int       @default(0)
-  lockUntil                 DateTime?
-  sessions                  Session[]
-  bookings                  Booking[]
-  payments                  Payment[]
-  notifications             Notification[]
-  universityVerifications   UniversityVerification[]
-  tripsDriven               Trip[]    @relation("DriverTrips")
-  buses                     Bus[]     @relation("DriverBuses")
-  auditLogs                 AuditLog[]
-  qrScans                   QrScan[]
-  createdAt                 DateTime  @default(now())
-  updatedAt                 DateTime  @updatedAt
+  passwordResetToken          String?
+  passwordResetExpires        DateTime?
+  twoFactorEnabled            Boolean                      @default(false)
+  twoFactorSecret             String?
+  failedLoginAttempts         Int                          @default(0)
+  lockUntil                   DateTime?
+  sessions                    Session[]
+  bookings                    Booking[]
+  payments                    Payment[]
+  notifications               Notification[]
+  universityVerifications     UniversityVerification[]
+  tripsDriven                 Trip[]                       @relation("DriverTrips")
+  buses                       Bus[]                        @relation("DriverBuses")
+  auditLogs                   AuditLog[]
+  qrScans                     QrScan[]
+  complaints                  Complaint[]
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+
+  @@index([role, status])
+  @@index([email])
 }
 
 enum UserRole {
@@ -70,44 +75,86 @@ enum UniversityVerificationStatus {
 }
 
 model Session {
-  id               String   @id @default(uuid())
-  tokenId          String   @unique
+  id               String    @id @default(uuid())
+  tokenId          String    @unique
   refreshTokenHash String
   ip               String?
   userAgent        String?
-  deviceName       String?  @db.VarChar(100)
-  createdAt        DateTime @default(now())
-  lastUsedAt       DateTime @default(now())
+  deviceName       String?   @db.VarChar(100)
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
   expiresAt        DateTime?
-  revoked          Boolean  @default(false)
-  user             User     @relation(fields: [userId], references: [id])
+  revoked          Boolean   @default(false)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId           String
+
+  @@index([userId])
+}
+
+model Route {
+  id          String     @id @default(uuid())
+  name        String
+  pickupPoint String
+  destination String
+  distanceKm  Float?
+  baseFare    Decimal    @default(0) @db.Decimal(12, 2)
+  isActive    Boolean    @default(true)
+  schedules   Schedule[]
+  trips       Trip[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([isActive])
+}
+
+model Schedule {
+  id            String   @id @default(uuid())
+  route         Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  routeId       String
+  label         String?
+  departureTime String
+  daysOfWeek    Int[]
+  isActive      Boolean  @default(true)
+  trips         Trip[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([routeId])
 }
 
 model Trip {
-  id             String   @id @default(uuid())
+  id             String        @id @default(uuid())
   title          String
   pickupPoint    String
   destination    String
+  route          Route?        @relation(fields: [routeId], references: [id])
+  routeId        String?
+  schedule       Schedule?     @relation(fields: [scheduleId], references: [id])
+  scheduleId     String?
   busNumber      String
-  driver         User?    @relation("DriverTrips", fields: [driverId], references: [id])
+  driver         User?         @relation("DriverTrips", fields: [driverId], references: [id])
   driverId       String?
+  bus            Bus?          @relation(fields: [busId], references: [id])
+  busId          String?
   capacity       Int
-  confirmedCount Int      @default(0)
+  confirmedCount Int           @default(0)
   departureTime  DateTime
-  isActive       Boolean  @default(true)
+  isActive       Boolean       @default(true)
   bookings       Booking[]
   waitingListItems WaitingList[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
   @@index([departureTime])
+  @@index([routeId])
+  @@index([driverId])
 }
 
 model Booking {
-  id              String    @id @default(uuid())
-  user            User      @relation(fields: [userId], references: [id])
+  id              String        @id @default(uuid())
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId          String
-  trip            Trip?     @relation(fields: [tripId], references: [id])
+  trip            Trip?         @relation(fields: [tripId], references: [id])
   tripId          String?
   pickupPoint     String
   destination     String
@@ -116,15 +163,16 @@ model Booking {
   seat            String?
   status          BookingStatus @default(waiting)
   waitingPosition Int?
-  noShow          Boolean   @default(false)
+  noShow          Boolean       @default(false)
   boardedAt       DateTime?
   qrPayload       String?
   route           String
   payment         Payment[]
   qrScans         QrScan[]
   waitingListItem WaitingList?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
   @@index([userId])
   @@index([tripId])
   @@index([status])
@@ -138,26 +186,30 @@ enum BookingStatus {
 }
 
 model Payment {
-  id                String      @id @default(uuid())
-  user              User        @relation(fields: [userId], references: [id])
-  userId            String
-  booking           Booking?    @relation(fields: [bookingId], references: [id])
-  bookingId         String?
-  amount            Decimal     @db.Decimal(12, 2)
-  currency          String      @default("EGP")
-  method            PaymentMethod
-  status            PaymentStatus @default(pending)
-  reference         String      @unique
-  proofImage        String?
-  description       String?
-  metadata          Json?
-  transactionId     String?
-  invoiceUrl        String?
-  isActive          Boolean     @default(true)
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id            String        @id @default(uuid())
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  booking       Booking?      @relation(fields: [bookingId], references: [id])
+  bookingId     String?
+  amount        Decimal       @db.Decimal(12, 2)
+  currency      String        @default("EGP")
+  method        PaymentMethod
+  status        PaymentStatus @default(pending)
+  reference     String        @unique
+  proofImage    String?
+  description   String?
+  metadata      Json?
+  transactionId String?
+  invoiceUrl    String?
+  verifiedAt    DateTime?
+  verifiedBy    String?
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
   @@index([userId])
   @@index([status])
+  @@index([createdAt])
 }
 
 enum PaymentMethod {
@@ -171,27 +223,31 @@ enum PaymentMethod {
 
 enum PaymentStatus {
   pending
+  under_review
   completed
   failed
   refunded
 }
 
 model Bus {
-  id             String   @id @default(uuid())
-  busNumber      String   @unique
-  capacity       Int
-  make           String?
-  model          String?
-  licensePlate   String?
-  driver         User?    @relation("DriverBuses", fields: [driverId], references: [id])
-  driverId       String?
-  status         BusStatus @default(active)
+  id              String    @id @default(uuid())
+  busNumber       String    @unique
+  capacity        Int
+  make            String?
+  model           String?
+  licensePlate    String?
+  driver          User?     @relation("DriverBuses", fields: [driverId], references: [id])
+  driverId        String?
+  status          BusStatus @default(active)
   lastMaintenance DateTime?
   nextMaintenance DateTime?
-  amenities      String[]
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  amenities       String[]
+  isActive        Boolean   @default(true)
+  trips           Trip[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([driverId])
 }
 
 enum BusStatus {
@@ -201,16 +257,17 @@ enum BusStatus {
 }
 
 model Notification {
-  id         String   @id @default(uuid())
-  user       User     @relation(fields: [userId], references: [id])
-  userId     String
-  type       NotificationType
-  title      String
-  message    String
-  read       Boolean  @default(false)
-  metadata   Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String           @id @default(uuid())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
   @@index([userId])
   @@index([read])
 }
@@ -225,17 +282,17 @@ enum NotificationType {
 }
 
 model UniversityVerification {
-  id                String   @id @default(uuid())
-  user              User     @relation(fields: [userId], references: [id])
+  id                String                       @id @default(uuid())
+  user              User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId            String
   studentNumber     String
   universityIdImage String
   status            UniversityVerificationStatus @default(pending)
   notes             String?
-  submittedAt       DateTime @default(now())
+  submittedAt       DateTime                     @default(now())
   reviewedAt        DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
 }
 
 model Setting {
@@ -248,56 +305,87 @@ model Setting {
 }
 
 model Analytics {
-  id               String   @id @default(uuid())
-  date             DateTime @default(now())
-  totalBookings    Int      @default(0)
-  confirmedBookings Int     @default(0)
-  cancelledBookings Int     @default(0)
-  totalRevenue     Decimal  @db.Decimal(12, 2) @default("0.00")
-  activeUsers      Int      @default(0)
-  newUsers         Int      @default(0)
-  completedTrips   Int      @default(0)
-  noShowCount      Int      @default(0)
-  averageOccupancy Decimal  @db.Decimal(5, 2) @default("0.00")
-  peakBookingTime  String?
-  topRoutes        Json?
-  metrics          Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                String   @id @default(uuid())
+  date              DateTime @default(now())
+  totalBookings     Int      @default(0)
+  confirmedBookings Int      @default(0)
+  cancelledBookings Int      @default(0)
+  totalRevenue      Decimal  @default(0) @db.Decimal(12, 2)
+  activeUsers       Int      @default(0)
+  newUsers          Int      @default(0)
+  completedTrips    Int      @default(0)
+  noShowCount       Int      @default(0)
+  averageOccupancy  Decimal  @default(0) @db.Decimal(5, 2)
+  peakBookingTime   String?
+  topRoutes         Json?
+  metrics           Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
   @@index([date])
 }
 
 model AuditLog {
   id        String   @id @default(uuid())
   event     String
-  user      User?    @relation(fields: [userId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   userId    String?
   ip        String?
   metadata  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([event])
+  @@index([createdAt])
 }
 
 model WaitingList {
-  id       String   @id @default(uuid())
-  booking  Booking  @relation(fields: [bookingId], references: [id])
-  bookingId String  @unique
-  trip     Trip?    @relation(fields: [tripId], references: [id])
-  tripId   String?
-  position Int
+  id        String   @id @default(uuid())
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId String   @unique
+  trip      Trip?    @relation(fields: [tripId], references: [id])
+  tripId    String?
+  position  Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([tripId, position])
 }
 
 model QrScan {
-  id         String   @id @default(uuid())
-  booking    Booking  @relation(fields: [bookingId], references: [id])
-  bookingId  String
-  user       User     @relation(fields: [userId], references: [id])
-  userId     String
-  scannedAt  DateTime @default(now())
-  location   String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  scannedAt DateTime @default(now())
+  location  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bookingId, scannedAt])
+  @@index([bookingId])
+}
+
+model Complaint {
+  id        String          @id @default(uuid())
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  subject   String
+  message   String
+  status    ComplaintStatus @default(open)
+  adminNote String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+enum ComplaintStatus {
+  open
+  in_progress
+  resolved
+  closed
 }
