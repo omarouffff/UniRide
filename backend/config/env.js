@@ -1,4 +1,5 @@
 const { logger } = require('../utils/logger');
+const { configureDatabaseEnv, validateDatabaseEnvForProduction, maskUrl } = require('./database');
 
 const REQUIRED_ENV_VARS = ['DATABASE_URL'];
 
@@ -40,7 +41,27 @@ function validateEnv() {
     }
   }
 
+  const dbConfig = configureDatabaseEnv();
+  if (!dbConfig.ok) {
+    logger.error('DATABASE_URL configuration error', { error: dbConfig.error });
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
+  } else if (dbConfig.hints?.length) {
+    logger.info('Database connection', {
+      mode: dbConfig.mode,
+      databaseUrl: maskUrl(process.env.DATABASE_URL),
+      directUrl: maskUrl(process.env.DIRECT_DATABASE_URL),
+      hints: dbConfig.hints,
+    });
+  }
+
   if (process.env.NODE_ENV === 'production') {
+    const dbProd = validateDatabaseEnvForProduction();
+    if (!dbProd.ok) {
+      logger.error('Production database validation failed', { error: dbProd.error });
+      process.exit(1);
+    }
     const prodMissing = PRODUCTION_REQUIRED.filter((key) => !process.env[key] || isPlaceholder(process.env[key]));
     if (prodMissing.length > 0) {
       logger.error('Production requires additional env vars', { prodMissing });

@@ -14,6 +14,10 @@ RUN apk add --no-cache openssl
 COPY package*.json ./
 COPY prisma ./prisma/
 
+# Dummy URLs for `prisma generate` only (runtime uses Railway env)
+ENV DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres
+ENV DIRECT_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres
+
 RUN npm ci
 RUN npx prisma generate
 
@@ -42,13 +46,15 @@ COPY . .
 
 RUN addgroup -g 1001 -S nodejs \
   && adduser -S nodejs -u 1001 -G nodejs \
+  && chmod +x /app/scripts/docker-entrypoint.sh \
   && chown -R nodejs:nodejs /app
 
 USER nodejs
 
+ENV PORT=5000
 EXPOSE 5000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
-  CMD node -e "require('http').get('http://127.0.0.1:' + (process.env.PORT || 5000) + '/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://127.0.0.1:' + (process.env.PORT || 5000) + '/api/health', (r) => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>{ try{ const j=JSON.parse(b); process.exit(r.statusCode===200 && j.database?.connected ? 0 : 1);}catch(e){process.exit(1);} }); }).on('error', () => process.exit(1))"
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+CMD ["/app/scripts/docker-entrypoint.sh"]

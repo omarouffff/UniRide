@@ -28,6 +28,9 @@ const { resolveUserFromToken } = require('./middleware/authMiddleware');
 
 dotenv.config();
 
+const { configureDatabaseEnv } = require('./config/database');
+configureDatabaseEnv();
+
 const { validateEnv } = require('./config/env');
 validateEnv();
 
@@ -223,6 +226,7 @@ app.get('/api/health', async (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     database: {
       connected: dbConnected,
+      mode: process.env.DATABASE_URL?.includes('pooler') ? 'pooler' : 'direct',
     },
     cloudinary: {
       configured: Boolean(cloudinaryConfig.cloud_name && cloudinaryConfig.api_key && cloudinaryConfig.api_secret && !hasCloudinaryPlaceholder),
