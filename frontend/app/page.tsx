@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, MapPin, Clock, Users, QrCode, Radio } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
-import api from '@/lib/api';
+import api, { formatApiError } from '@/lib/api';
 import { buttonVariants } from '@/components/ui/button';
 import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
 import { MobileNav } from '@/components/layout/MobileNav';
@@ -44,13 +44,14 @@ export default function HomePage() {
   const [destination, setDestination] = useState('');
   const [selectedTripId, setSelectedTripId] = useState('');
   const [activeBooking, setActiveBooking] = useState<ActiveBooking | null>(null);
+  const [tripsError, setTripsError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    api
+  const loadTrips = () => {
+    setLoadingTrips(true);
+    setTripsError(null);
+    return api
       .get('/bookings/public/trips')
       .then((res) => {
-        if (!active) return;
         const list: TripOption[] = res.data.trips || [];
         setTrips(list);
         if (list[0]) {
@@ -59,10 +60,12 @@ export default function HomePage() {
           setSelectedTripId(list[0].id);
         }
       })
-      .finally(() => active && setLoadingTrips(false));
-    return () => {
-      active = false;
-    };
+      .catch((err) => setTripsError(formatApiError(err, 'Could not load trips')))
+      .finally(() => setLoadingTrips(false));
+  };
+
+  useEffect(() => {
+    loadTrips();
   }, []);
 
   useEffect(() => {
@@ -229,7 +232,15 @@ export default function HomePage() {
             <div className="mt-5 space-y-3 max-h-[420px] overflow-y-auto pr-1">
               {loadingTrips &&
                 Array.from({ length: 3 }).map((_, i) => <TripCardSkeleton key={i} />)}
-              {!loadingTrips && filteredTrips.length === 0 && (
+              {tripsError && (
+                <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">
+                  <p>{tripsError}</p>
+                  <button type="button" onClick={loadTrips} className="mt-3 text-cyan-300 underline text-xs">
+                    Retry
+                  </button>
+                </div>
+              )}
+              {!loadingTrips && !tripsError && filteredTrips.length === 0 && (
                 <p className="text-sm text-slate-400">No trips match your route. Check back soon.</p>
               )}
               {filteredTrips.map((trip) => (

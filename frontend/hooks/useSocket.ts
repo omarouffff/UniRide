@@ -1,42 +1,90 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { getApiBaseUrl } from '@/lib/apiConfig';
+import { getSocketUrl } from '@/lib/apiConfig';
 import { getSupabaseAccessToken } from '@/lib/supabaseClient';
+
+const MAX_RECONNECT_ATTEMPTS = 8;
 
 export function useSocket(enabled = true) {
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const disconnect = useCallback(() => {
+    socketRef.current?.removeAllListeners();
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+    setConnected(false);
+  }, []);
 
   useEffect(() => {
     if (!enabled || typeof window === 'undefined') return;
 
     let active = true;
+    let socket: Socket | null = null;
 
     const connect = async () => {
-      const token = await getSupabaseAccessToken();
-      if (!token || !active) return;
+      try {
+        const token = await getSupabaseAccessToken();
+        if (!token || !active) return;
 
-      const socket = io(getApiBaseUrl().replace(/\/api$/, ''), {
-        auth: { token },
-        transports: ['websocket'],
-        withCredentials: true,
-      });
+        const url = getSocketUrl();
+        if (!url) {
+          setError('Socket URL is not configured');
+          return;
+        }
 
-      socket.on('connect', () => active && setConnected(true));
-      socket.on('disconnect', () => active && setConnected(false));
-      socketRef.current = socket;
+        socket = io(url, {
+          auth: { token },
+          transports: ['websocket', 'polling'],
+          withCredentials: true,
+          reconnection: true,
+          reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 8000,
+        });
+
+        socket.on('connect', () => {
+          if (!active) return;
+          setConnected(true);
+          setError(null);
+        });
+
+        socket.on('disconnect', () => active && setConnected(false));
+
+        socket.on('connect_error', (err) => {
+          if (!active) return;
+          setError(err.message || 'Socket connection failed');
+          setConnected(false);
+        });
+
+        socket.io.on('reconnect_attempt', () => {
+          if (!active) return;
+          setError(null);
+        });
+
+        socket.io.on('reconnect_failed', () => {
+          if (!active) return;
+          setError('Unable to connect to realtime server');
+        });
+
+        socketRef.current = socket;
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : 'Socket setup failed');
+        }
+      }
     };
 
     connect();
 
     return () => {
       active = false;
-      socketRef.current?.disconnect();
-      socketRef.current = null;
+      disconnect();
     };
-  }, [enabled]);
+  }, [enabled, disconnect]);
 
-  return { socket: socketRef, connected };
+  return { socket: socketRef, connected, error };
 }

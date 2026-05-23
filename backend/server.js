@@ -48,6 +48,10 @@ function buildAllowedOrigins() {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
+  if (process.env.VERCEL_URL) {
+    fromEnv.push(`https://${process.env.VERCEL_URL}`);
+  }
+
   return [...new Set(fromEnv)];
 }
 
@@ -232,7 +236,23 @@ app.get('/api/version', (req, res) => {
 });
 
 app.get('/api/csrf-token', (req, res) => {
-  res.json({ csrfToken: req.csrfToken() });
+  res.json({ csrfToken: req.csrfToken(), success: true });
+});
+
+app.get('/api/config', (req, res) => {
+  res.json({
+    success: true,
+    version: appVersion,
+    auth: 'supabase',
+    endpoints: {
+      health: '/api/health',
+      csrf: '/api/csrf-token',
+      publicTrips: '/api/bookings/public/trips',
+      authMe: '/api/auth/me',
+      authLogin: '/api/auth/login',
+      authRegister: '/api/auth/register',
+    },
+  });
 });
 
 app.get('/api/keep-alive', (req, res) => {

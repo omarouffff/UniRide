@@ -1,11 +1,86 @@
 const asyncHandler = require('express-async-handler');
-const { getSupabaseAdmin } = require('../config/supabase');
+const { getSupabaseAdmin, getSupabaseAnon } = require('../config/supabase');
 const userRepository = require('../repositories/userRepository');
 const { uploadToCloudinary } = require('../services/cloudinaryService');
 const { toSafeUser } = require('../utils/userMapper');
 const { resolveUserFromToken } = require('../middleware/authMiddleware');
 const { prisma } = require('../prisma/client');
 const { auditEvent } = require('../utils/logger');
+
+const loginUser = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  const supabase = getSupabaseAnon();
+  if (!supabase) {
+    return res.status(503).json({ message: 'Supabase auth is not configured on the server' });
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.toLowerCase(),
+    password,
+  });
+
+  if (error || !data.session) {
+    return res.status(401).json({ message: error?.message || 'Invalid credentials' });
+  }
+
+  const user = await resolveUserFromToken(data.session.access_token);
+  auditEvent('auth.login', { userId: user?.id });
+
+  res.json({
+    user: toSafeUser(user),
+    accessToken: data.session.access_token,
+    refreshToken: data.session.refresh_token,
+  });
+});
+
+const registerUser = asyncHandler(async (req, res) => {
+  const { name, email, password, phoneNumber, college, academicYear, universityId } = req.body;
+  const supabase = getSupabaseAnon();
+  if (!supabase) {
+    return res.status(503).json({ message: 'Supabase auth is not configured on the server' });
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email: email.toLowerCase(),
+    password,
+    options: {
+      data: {
+        role: 'student',
+        status: 'pending',
+        name,
+        phoneNumber,
+        college,
+        academicYear,
+        universityId,
+        universityIdStatus: 'pending',
+      },
+    },
+  });
+
+  if (error) {
+    return res.status(400).json({ message: error.message });
+  }
+
+  let user = null;
+  if (data.session?.access_token) {
+    user = await resolveUserFromToken(data.session.access_token);
+  } else if (data.user) {
+    user = await userRepository.findByEmail(email);
+  }
+
+  auditEvent('auth.register', { email });
+
+  res.status(201).json({
+    message: 'Registration successful. Await admin approval before booking.',
+    user: user ? toSafeUser(user) : null,
+    session: data.session
+      ? {
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+        }
+      : null,
+  });
+});
 
 const syncUser = asyncHandler(async (req, res) => {
   const authHeader = req.headers.authorization;
@@ -100,6 +175,8 @@ const submitUniversityId = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  loginUser,
+  registerUser,
   syncUser,
   getProfile,
   updateProfile,

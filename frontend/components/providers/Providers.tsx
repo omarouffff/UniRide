@@ -4,6 +4,7 @@ import { ReactNode, useState } from 'react';
 import { ThemeProvider } from '@/components/ui/theme-provider';
 import { ToastProvider } from '@/components/ui/toast';
 import AuthBootstrap from '@/components/providers/AuthBootstrap';
+import { ApiConfigGuard } from '@/components/config/ApiConfigGuard';
 import LanguageProvider from '@/components/i18n/LanguageProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -15,7 +16,9 @@ export default function Providers({ children }: { children: ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <LanguageProvider>
-            <AuthBootstrap>{children}</AuthBootstrap>
+            <ApiConfigGuard>
+              <AuthBootstrap>{children}</AuthBootstrap>
+            </ApiConfigGuard>
           </LanguageProvider>
         </ToastProvider>
       </QueryClientProvider>

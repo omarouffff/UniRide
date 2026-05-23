@@ -2,8 +2,9 @@ import type { Session, User } from '@supabase/supabase-js';
 import { createBrowserClient, createServerClient } from '@supabase/ssr';
 import { UserProfile } from '@/types/user';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+import { getSupabasePublicConfig } from '@/lib/supabaseEnv';
+
+const { url: supabaseUrl, key: supabaseKey } = getSupabasePublicConfig();
 
 type SupabaseUserMetadata = {
   role?: 'student' | 'admin' | 'driver';

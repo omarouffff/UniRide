@@ -1,10 +1,12 @@
 import { createBrowserClient } from '@supabase/ssr';
+import { getSupabasePublicConfig } from '@/lib/supabaseEnv';
 
 export function getBrowserSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const { url, key } = getSupabasePublicConfig();
   if (!url || !key) {
-    throw new Error('Supabase environment variables are not configured');
+    throw new Error(
+      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel.'
+    );
   }
   return createBrowserClient(url, key);
 }
