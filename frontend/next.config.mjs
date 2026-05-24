@@ -1,29 +1,51 @@
 /** @type {import('next').NextConfig} */
 
+function pickEnv(...keys) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+const resolvedSupabaseUrl = pickEnv(
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'VITE_SUPABASE_URL',
+  'SUPABASE_URL'
+);
+
+const resolvedSupabaseAnonKey = pickEnv(
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+  'VITE_SUPABASE_ANON_KEY',
+  'SUPABASE_ANON_KEY'
+);
+
+const resolvedApiUrl = pickEnv('NEXT_PUBLIC_API_URL', 'NEXT_PUBLIC_API_BASE_URL');
+
 function getBackendOrigin() {
-  const raw = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!raw?.trim()) return null;
-  const trimmed = raw.trim().replace(/\/$/, '');
+  if (!resolvedApiUrl) return null;
+  const trimmed = resolvedApiUrl.replace(/\/$/, '');
   return trimmed.endsWith('/api') ? trimmed.slice(0, -4) : trimmed;
 }
 
-// Fail Vercel/production builds when the API URL is not configured
-if (process.env.VERCEL === '1') {
+const isCiProductionBuild =
+  process.env.VERCEL === '1' ||
+  process.env.RAILWAY_ENVIRONMENT === 'production' ||
+  (process.env.NODE_ENV === 'production' && process.env.CI === 'true');
+
+if (isCiProductionBuild) {
   const missing = [];
-  if (!process.env.NEXT_PUBLIC_API_URL?.trim() && !process.env.NEXT_PUBLIC_API_BASE_URL?.trim()) {
-    missing.push('NEXT_PUBLIC_API_URL');
+  if (!resolvedApiUrl) missing.push('NEXT_PUBLIC_API_URL');
+  if (!resolvedSupabaseUrl) {
+    missing.push('NEXT_PUBLIC_SUPABASE_URL (or VITE_SUPABASE_URL)');
   }
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()) {
-    missing.push('NEXT_PUBLIC_SUPABASE_URL');
-  }
-  const supabaseKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!supabaseKey?.trim()) {
-    missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  if (!resolvedSupabaseAnonKey) {
+    missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY (or VITE_SUPABASE_ANON_KEY)');
   }
   if (missing.length > 0) {
     throw new Error(
-      `[UniRide] Build blocked — set in Vercel Environment Variables: ${missing.join(', ')}`
+      `[UniRide] Build blocked — set environment variables: ${missing.join(', ')}`
     );
   }
 }
@@ -35,6 +57,12 @@ const nextConfig = {
   experimental: {
     typedRoutes: true,
   },
+  // Expose resolved values to browser (supports VITE_* aliases set on Railway)
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL: resolvedSupabaseUrl,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: resolvedSupabaseAnonKey,
+    ...(resolvedApiUrl ? { NEXT_PUBLIC_API_URL: resolvedApiUrl } : {}),
+  },
   images: {
     remotePatterns: [
       {
@@ -43,7 +71,6 @@ const nextConfig = {
       },
     ],
   },
-  // Optional: proxy /api to Render when env is set at build time (backup for misconfigured clients)
   async rewrites() {
     if (!backendOrigin) return [];
     return [

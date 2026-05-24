@@ -78,6 +78,10 @@ function validateEnv() {
     logger.warn('FRONTEND_URL or ALLOWED_ORIGINS not set — CORS will default to localhost only');
   }
 
+  if (!process.env.SUPABASE_ANON_KEY?.trim()) {
+    logger.warn('SUPABASE_ANON_KEY not set — /api/auth/login and /api/auth/register may not work');
+  }
+
   logger.info('Environment validation completed');
 }
 

@@ -47,6 +47,7 @@ COPY . .
 RUN addgroup -g 1001 -S nodejs \
   && adduser -S nodejs -u 1001 -G nodejs \
   && chmod +x /app/scripts/docker-entrypoint.sh \
+  && chmod +x /app/scripts/run-migrations.js \
   && chown -R nodejs:nodejs /app
 
 USER nodejs
@@ -54,7 +55,8 @@ USER nodejs
 ENV PORT=5000
 EXPOSE 5000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://127.0.0.1:' + (process.env.PORT || 5000) + '/api/health', (r) => { let b=''; r.on('data',d=>b+=d); r.on('end',()=>{ try{ const j=JSON.parse(b); process.exit(r.statusCode===200 && j.database?.connected ? 0 : 1);}catch(e){process.exit(1);} }); }).on('error', () => process.exit(1))"
+# Liveness: HTTP server responds (DB may still be connecting; Railway uses railway.toml healthcheck too)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
+  CMD node -e "require('http').get('http://127.0.0.1:' + (process.env.PORT || 5000) + '/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
 
 CMD ["/app/scripts/docker-entrypoint.sh"]

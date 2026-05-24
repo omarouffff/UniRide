@@ -1,11 +1,13 @@
 #!/bin/sh
 set -e
 
-# Prisma schema requires DIRECT_DATABASE_URL; default to DATABASE_URL for direct-only setups
-export DIRECT_DATABASE_URL="${DIRECT_DATABASE_URL:-${DIRECT_URL:-$DATABASE_URL}}"
+export DIRECT_DATABASE_URL="${DIRECT_DATABASE_URL:-${DIRECT_URL:-}}"
 
-echo "[UniRide] Running Prisma migrations..."
-npx prisma migrate deploy
+if [ "${SKIP_MIGRATIONS:-false}" = "true" ]; then
+  echo "[UniRide] SKIP_MIGRATIONS=true — skipping prisma migrate deploy"
+else
+  node /app/scripts/run-migrations.js
+fi
 
-echo "[UniRide] Starting API server on port ${PORT:-5000}..."
-exec node server.js
+echo "[UniRide] Starting API on 0.0.0.0:${PORT:-5000}..."
+exec node /app/server.js

@@ -3,6 +3,8 @@
  * All NEXT_PUBLIC_* vars are inlined at build time.
  */
 
+import { getSupabasePublicConfig, isSupabaseConfigured } from '@/lib/supabaseEnv';
+
 export type PublicEnv = {
   apiUrl: string;
   socketUrl: string;
@@ -22,14 +24,6 @@ export class EnvConfigError extends Error {
     this.name = 'EnvConfigError';
     this.missing = missing;
   }
-}
-
-function readSupabaseAnonKey(): string | undefined {
-  return (
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    undefined
-  )?.trim();
 }
 
 function normalizeApiUrl(raw: string): string {
@@ -73,17 +67,18 @@ export function getRequiredSocketUrl(): string {
 export function getPublicEnv(): PublicEnv {
   const isProduction = process.env.NODE_ENV === 'production';
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || '';
-  const supabaseAnonKey = readSupabaseAnonKey() || '';
+  const { url: supabaseUrl, key: supabaseAnonKey } = getSupabasePublicConfig();
 
   if (isProduction) {
     const missing: string[] = [];
     if (!process.env.NEXT_PUBLIC_API_URL?.trim() && !process.env.NEXT_PUBLIC_API_BASE_URL?.trim()) {
       missing.push('NEXT_PUBLIC_API_URL');
     }
-    if (!supabaseUrl) missing.push('NEXT_PUBLIC_SUPABASE_URL');
-    if (!supabaseAnonKey) {
-      missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)');
+    if (!isSupabaseConfigured()) {
+      if (!supabaseUrl) missing.push('NEXT_PUBLIC_SUPABASE_URL (or VITE_SUPABASE_URL)');
+      if (!supabaseAnonKey) {
+        missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY (or VITE_SUPABASE_ANON_KEY)');
+      }
     }
     if (missing.length > 0) {
       throw new EnvConfigError(missing);

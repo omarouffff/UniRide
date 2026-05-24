@@ -4,7 +4,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import api, { refreshCsrfToken } from '@/lib/api';
 import { logApiConfig } from '@/lib/apiConfig';
 import { useAuthStore } from '@/store/useAuthStore';
-import { getBrowserSupabase } from '@/lib/supabaseClient';
+import { tryGetBrowserSupabase } from '@/lib/supabaseClient';
+import { logSupabaseConfig } from '@/lib/supabaseEnv';
 import {
   mapSupabaseUserToProfile,
   signInWithEmail,
@@ -12,6 +13,7 @@ import {
   signUpWithEmail,
   getBrowserSupabaseSession,
 } from '@/lib/supabaseAuth';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import type { UserProfile } from '@/types/user';
 
 type AuthContextValue = {
@@ -94,8 +96,12 @@ export default function AuthBootstrap({ children }: { children: ReactNode }) {
     };
 
     const subscribeAuthState = () => {
-      const supabase = getBrowserSupabase();
-      const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const supabase = tryGetBrowserSupabase();
+      if (!supabase) {
+        logSupabaseConfig('AuthBootstrap');
+        return;
+      }
+      const { data } = supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
         if (!active) return;
         if (session?.user) {
           const profile = await hydrateProfile();

@@ -90,31 +90,45 @@ function normalizeDatabaseUrl(raw, label = 'DATABASE_URL') {
   return { url: value, hostname, port, isPooler, isTransactionPooler };
 }
 
+function buildSupabaseDirectUrl(sourceUrl) {
+  const parsed = parseDatabaseUrl(sourceUrl);
+  if (!parsed || !parsed.hostname.includes('pooler.supabase.com')) {
+    return null;
+  }
+
+  const user = decodeURIComponent(parsed.username || '');
+  const projectRef = user.startsWith('postgres.') ? user.slice('postgres.'.length) : null;
+  if (!projectRef) return null;
+
+  const direct = new URL(sourceUrl);
+  direct.hostname = `db.${projectRef}.supabase.co`;
+  direct.port = '5432';
+  direct.username = 'postgres';
+  if (!direct.searchParams.has('sslmode')) {
+    direct.searchParams.set('sslmode', 'require');
+  }
+  direct.searchParams.delete('pgbouncer');
+  return direct.toString();
+}
+
 function resolveDirectUrl(databaseUrl, explicitDirect) {
   if (explicitDirect?.trim()) {
     const normalized = normalizeDatabaseUrl(explicitDirect.trim(), 'DIRECT_DATABASE_URL');
-    return normalized.url || explicitDirect.trim();
-  }
-
-  const parsed = parseDatabaseUrl(databaseUrl);
-  if (!parsed) return databaseUrl;
-
-  // Pooler host → direct host: db.<project-ref>.supabase.co
-  if (parsed.hostname.includes('pooler.supabase.com')) {
-    const user = decodeURIComponent(parsed.username || '');
-    const projectRef = user.startsWith('postgres.') ? user.slice('postgres.'.length) : null;
-    if (projectRef) {
-      const direct = new URL(databaseUrl);
-      direct.hostname = `db.${projectRef}.supabase.co`;
-      direct.port = '5432';
-      direct.username = 'postgres';
-      if (!direct.searchParams.has('sslmode')) {
-        direct.searchParams.set('sslmode', 'require');
+    const candidate = normalized.url || explicitDirect.trim();
+    const parsed = parseDatabaseUrl(candidate);
+    // Supabase "DIRECT_URL" in dashboard sometimes still points at pooler:5432 — upgrade to db.<ref>.supabase.co
+    if (parsed?.hostname.includes('pooler.supabase.com')) {
+      const upgraded = buildSupabaseDirectUrl(candidate) || buildSupabaseDirectUrl(databaseUrl);
+      if (upgraded) {
+        logger.info('Upgraded DIRECT_DATABASE_URL from pooler host to Supabase direct host');
+        return upgraded;
       }
-      direct.searchParams.delete('pgbouncer');
-      return direct.toString();
     }
+    return candidate;
   }
+
+  const upgraded = buildSupabaseDirectUrl(databaseUrl);
+  if (upgraded) return upgraded;
 
   return databaseUrl;
 }

@@ -48,7 +48,7 @@ process.on('uncaughtException', (error) => {
 function buildAllowedOrigins() {
   const fromEnv = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || 'http://localhost:3000')
     .split(',')
-    .map((origin) => origin.trim())
+    .map((origin) => origin.trim().replace(/\/$/, ''))
     .filter(Boolean);
 
   if (process.env.VERCEL_URL) {
@@ -90,11 +90,14 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token', 'x-client-version'],
 };
 
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: process.env.NODE_ENV || 'development',
-  tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || 0.05),
-});
+const sentryEnabled = Boolean(process.env.SENTRY_DSN?.trim());
+if (sentryEnabled) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || 0.05),
+  });
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -113,7 +116,9 @@ app.set('io', io);
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
-app.use(Sentry.Handlers.requestHandler());
+if (sentryEnabled) {
+  app.use(Sentry.Handlers.requestHandler());
+}
 app.use(expressWinston.logger({
   winstonInstance: logger,
   meta: true,
@@ -208,10 +213,12 @@ app.use((req, res, next) => {
 
 app.get('/api/health', async (req, res) => {
   let dbConnected = false;
+  let dbError = null;
   try {
     await prisma.$queryRaw`SELECT 1`;
     dbConnected = true;
   } catch (error) {
+    dbError = error.message;
     logger.warn('Prisma health check failed', { error: error.message });
   }
 
@@ -221,11 +228,12 @@ app.get('/api/health', async (req, res) => {
 
   res.status(200).json({
     success: true,
-    status: 'running',
+    status: dbConnected ? 'running' : 'degraded',
     version: appVersion,
     environment: process.env.NODE_ENV || 'development',
     database: {
       connected: dbConnected,
+      error: dbError,
       mode: process.env.DATABASE_URL?.includes('pooler') ? 'pooler' : 'direct',
     },
     cloudinary: {
@@ -233,6 +241,16 @@ app.get('/api/health', async (req, res) => {
       cloudName: cloudinaryConfig.cloud_name || null,
     },
   });
+});
+
+/** Readiness probe — 503 until database is reachable */
+app.get('/api/ready', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ ready: true });
+  } catch (error) {
+    res.status(503).json({ ready: false, error: error.message });
+  }
 });
 
 app.get('/api/version', (req, res) => {
@@ -323,13 +341,22 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 app.use(notFound);
-app.use(Sentry.Handlers.errorHandler());
+if (sentryEnabled) {
+  app.use(Sentry.Handlers.errorHandler());
+}
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 4000;
 
 async function start() {
-  await connectDatabase();
+  try {
+    await connectDatabase();
+  } catch (error) {
+    logger.error('Database unavailable at startup — server will listen; /api/health returns 503 until DB is up', {
+      error: error.message,
+    });
+  }
+
   await initRedis();
 
   if (process.env.ENABLE_NO_SHOW_CRON !== 'false') {
@@ -352,7 +379,7 @@ async function start() {
 
 if (require.main === module) {
   start().catch((error) => {
-    logger.error('Failed to start server', { error: error.message });
+    logger.error('Failed to bind HTTP server', { error: error.message });
     process.exit(1);
   });
 }

@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+import { getSupabasePublicConfig } from '@/lib/supabaseEnv';
 
 const authPages = ['/login', '/register', '/forgot-password'];
 const protectedRoutes = [
@@ -25,11 +22,12 @@ export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
   const response = NextResponse.next();
 
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
+  const { url: supabaseUrl, key: supabaseKey } = getSupabasePublicConfig();
+  if (!supabaseUrl || !supabaseKey) {
     return response;
   }
 
-  const supabase = createServerClient(SUPABASE_URL, SUPABASE_KEY, {
+  const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
       getAll: () => req.cookies.getAll(),
       setAll: (cookies) => {

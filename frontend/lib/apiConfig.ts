@@ -1,4 +1,5 @@
 import { EnvConfigError, getPublicEnv, getRequiredApiUrl, getRequiredSocketUrl } from '@/lib/env';
+import { getSupabaseConfigError } from '@/lib/supabaseEnv';
 
 export { EnvConfigError };
 
@@ -41,6 +42,7 @@ export function logApiConfig(context = 'api') {
     const env = getEnv();
     console.info(`[UniRide:${context}] API:`, env.apiUrl);
     console.info(`[UniRide:${context}] Socket:`, env.socketUrl);
+    console.info(`[UniRide:${context}] Supabase:`, env.supabaseUrl || '(not set)');
   } catch (error) {
     if (error instanceof EnvConfigError) {
       console.error(`[UniRide:${context}] ${error.message}`);
@@ -58,6 +60,9 @@ export function isApiConfigured(): boolean {
 }
 
 export function getConfigErrorMessage(): string | null {
+  const supabaseError = getSupabaseConfigError();
+  if (supabaseError) return supabaseError;
+
   try {
     getPublicEnv();
     return null;

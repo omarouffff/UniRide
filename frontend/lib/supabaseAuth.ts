@@ -2,9 +2,8 @@ import type { Session, User } from '@supabase/supabase-js';
 import { createBrowserClient, createServerClient } from '@supabase/ssr';
 import { UserProfile } from '@/types/user';
 
-import { getSupabasePublicConfig } from '@/lib/supabaseEnv';
-
-const { url: supabaseUrl, key: supabaseKey } = getSupabasePublicConfig();
+import { getSupabasePublicConfig, SupabaseConfigError } from '@/lib/supabaseEnv';
+import { tryGetBrowserSupabase } from '@/lib/supabaseClient';
 
 type SupabaseUserMetadata = {
   role?: 'student' | 'admin' | 'driver';
@@ -68,8 +67,19 @@ export function mapSupabaseUserToProfile(user: User | null): UserProfile | null 
   };
 }
 
-const createSupabaseBrowser = () =>
-  createBrowserClient(supabaseUrl!, supabaseKey!);
+function createSupabaseBrowser() {
+  const client = tryGetBrowserSupabase();
+  if (client) return client;
+
+  const { url, key } = getSupabasePublicConfig();
+  if (!url || !key) {
+    throw new SupabaseConfigError([
+      'NEXT_PUBLIC_SUPABASE_URL (or VITE_SUPABASE_URL)',
+      'NEXT_PUBLIC_SUPABASE_ANON_KEY (or VITE_SUPABASE_ANON_KEY)',
+    ]);
+  }
+  return createBrowserClient(url, key);
+}
 
 export const signInWithEmail = async (email: string, password: string) => {
   const supabase = createSupabaseBrowser();
@@ -110,7 +120,10 @@ export const signOutSupabase = async () => {
 };
 
 export const getBrowserSupabaseSession = async () => {
-  const supabase = createSupabaseBrowser();
+  const supabase = tryGetBrowserSupabase();
+  if (!supabase) {
+    return { data: { session: null }, error: null };
+  }
   return supabase.auth.getSession();
 };
 
@@ -152,6 +165,13 @@ export const verifyEmailOtp = async (tokenHash: string, type: 'signup' | 'email'
 };
 
 export const getServerSupabaseSession = async (cookieStore: Parameters<typeof createServerClient>[2]['cookies']) => {
-  const supabase = createServerClient(supabaseUrl!, supabaseKey!, { cookies: cookieStore });
+  const { url, key } = getSupabasePublicConfig();
+  if (!url || !key) {
+    throw new SupabaseConfigError([
+      'NEXT_PUBLIC_SUPABASE_URL (or VITE_SUPABASE_URL)',
+      'NEXT_PUBLIC_SUPABASE_ANON_KEY (or VITE_SUPABASE_ANON_KEY)',
+    ]);
+  }
+  const supabase = createServerClient(url, key, { cookies: cookieStore });
   return supabase.auth.getSession();
 };
