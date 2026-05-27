@@ -1,26 +1,114 @@
-# Dependency directories
+# =========================================================
+# UniRide security-first .gitignore
+# Next.js + Node.js + Vercel + Render + Firebase + Prisma
+# =========================================================
+
+# -------------------------
+# Dependencies
+# -------------------------
 node_modules/
 jspm_packages/
 web_modules/
+.pnp/
+.pnp.js
 
-# Local configuration files
+# -------------------------
+# Environment files / secrets
+# Keep only safe examples committed.
+# -------------------------
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-*.env
+.env.*
+**/.env
+**/.env.*
 !.env.example
+!**/.env.example
+!**/.env.*.example
 
-# Next.js build output
+# Local override files that often contain production URLs or tokens
+*.local
+*.secret
+*.secrets
+secrets/
+.secrets/
+
+# -------------------------
+# Firebase / Google Cloud secrets
+# -------------------------
+serviceAccountKey.json
+service-account*.json
+*serviceAccount*.json
+firebase-adminsdk*.json
+google-services.json
+GoogleService-Info.plist
+gcloud-service-key.json
+credentials.json
+application_default_credentials.json
+
+# -------------------------
+# Database / Supabase / PostgreSQL credentials
+# -------------------------
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+supabase/.env.*
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+*.backup
+pgpass
+.pgpass
+
+# -------------------------
+# Private keys / certificates / SSL
+# -------------------------
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*.pub
+
+# -------------------------
+# Next.js / Vercel
+# -------------------------
 .next/
 out/
+.vercel/
+next-env.d.ts
+frontend/out/
+frontend/.next/
+frontend/.vercel/
 
-# Production build directories
+# -------------------------
+# Node / TypeScript builds
+# -------------------------
 dist/
 build/
+lib/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
 
-# Logs
+# -------------------------
+# Prisma
+# -------------------------
+prisma/dev.db
+prisma/dev.db-journal
+prisma/*.db
+prisma/*.db-journal
+prisma/migrations/migration_lock.toml
+
+# -------------------------
+# Logs and diagnostics
+# -------------------------
 logs/
 *.log
 npm-debug.log*
@@ -28,29 +116,68 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
-# Diagnostic reports (CRA)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
-# Runtime data / local uploads
+# -------------------------
+# Runtime uploads and generated media
+# Images must live in Cloudinary, not Git.
+# -------------------------
 uploads/
 backend/uploads/
-frontend/out/
+frontend/uploads/
+public/uploads/
+tmp/
+temp/
+.tmp/
+.temp/
 
-# IDEs and editors
+# -------------------------
+# Test / coverage / cache
+# -------------------------
+coverage/
+.nyc_output/
+.jest/
+.vitest/
+.turbo/
+.cache/
+.parcel-cache/
+.eslintcache
+
+# -------------------------
+# Package manager cache
+# -------------------------
+.npm/
+.yarn/
+.pnpm-store/
+
+# -------------------------
+# Docker / local compose overrides
+# -------------------------
+docker-compose.override.yml
+*.local.yml
+
+# -------------------------
+# OS / editor files
+# -------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
 .idea/
-.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-.DS_Store
 
-# Testing
-coverage/
-.nyc_output
-
-# Temporary files
-tmp/
-temp/
+# -------------------------
+# Misc generated artifacts
+# -------------------------
+*.tgz
+*.zip
+*.tar
+*.tar.gz
+*.bak
+*.orig
